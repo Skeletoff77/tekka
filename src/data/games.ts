@@ -1,6 +1,6 @@
 import { Game } from '../types/game';
 
-export const GAMES: Game[] = [
+export const INITIAL_GAMES: Game[] = [
   {
     id: 'chor-police-dakat-babu',
     name: 'Chor Police Dakat Babu',
@@ -59,6 +59,9 @@ export const GAMES: Game[] = [
   },
 ];
 
+export const GAMES = INITIAL_GAMES;
+
 export const CATEGORIES: { id: Game['category']; label: string; count?: number }[] = [
+  { id: 'all', label: 'All Games' },
   { id: 'social-deduction', label: 'Social Deduction' },
 ];
