@@ -22,6 +22,7 @@ import { Modal } from '../common/Modal';
 import { GameCard } from '../../games/chorPoliceDakatBabu/components/GameCard';
 import { ROLE_METADATA } from '../../games/chorPoliceDakatBabu/assets/gameAssets';
 import { CardRole } from '../../games/chorPoliceDakatBabu/types';
+import { BannerIllustration } from '../../games/chorPoliceDakatBabu/assets/BannerIllustration';
 
 interface GameDetailsProps {
   game: Game;
@@ -43,6 +44,7 @@ export const GameDetails: React.FC<GameDetailsProps> = ({
   const [notifyModalOpen, setNotifyModalOpen] = useState(false);
   const [notifyEmail, setNotifyEmail] = useState(user?.email || '');
   const [notifySubmitted, setNotifySubmitted] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   const isTracked = user?.wishlistedGameIds.includes(game.id) || false;
 
@@ -102,11 +104,16 @@ export const GameDetails: React.FC<GameDetailsProps> = ({
       <div className="relative w-full rounded-3xl border border-[#262626] bg-[#0A0A0A] overflow-hidden shadow-2xl">
         {/* Banner Artwork Container */}
         <div className="relative h-[340px] sm:h-[420px] md:h-[480px] w-full overflow-hidden">
-          <img
-            src={game.banner}
-            alt={game.name}
-            className="w-full h-full object-cover object-center scale-100 transition-transform duration-1000"
-          />
+          {!imageError ? (
+            <img
+              src={game.banner}
+              alt={game.name}
+              onError={() => setImageError(true)}
+              className="w-full h-full object-cover object-center scale-100 transition-transform duration-1000"
+            />
+          ) : (
+            <BannerIllustration className="w-full h-full object-cover" />
+          )}
 
           {/* Cinematic Black Gradients */}
           <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A] via-[#0A0A0A]/60 to-black/30" />

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { GAME_ASSETS } from '../assets/gameAssets';
-import { Sparkles, Trophy, AlertTriangle } from 'lucide-react';
+import { Sparkles, Trophy } from 'lucide-react';
+import { BannerIllustration } from '../assets/BannerIllustration';
 
 interface GameBannerProps {
   className?: string;
@@ -11,19 +12,26 @@ export const GameBanner: React.FC<GameBannerProps> = ({
   className = '',
   showDetails = true,
 }) => {
+  const [imageError, setImageError] = useState(false);
+
   return (
     <div
       className={`relative w-full rounded-2xl sm:rounded-3xl overflow-hidden border border-[#262626] bg-[#0A0A0A] shadow-2xl ${className}`}
     >
       {/* Banner Container */}
       <div className="relative w-full min-h-[160px] sm:min-h-[220px] md:min-h-[280px] lg:min-h-[340px] flex items-center justify-center overflow-hidden bg-[#0A0A0A]">
-        <img
-          src={GAME_ASSETS.banner}
-          alt="Chor Police Dakat Babu Banner"
-          draggable={false}
-          className="w-full h-auto max-h-[420px] object-contain object-center transition-transform duration-700 hover:scale-101 select-none"
-          loading="eager"
-        />
+        {!imageError ? (
+          <img
+            src={GAME_ASSETS.banner}
+            alt="Chor Police Dakat Babu Banner"
+            draggable={false}
+            onError={() => setImageError(true)}
+            className="w-full h-auto max-h-[420px] object-contain object-center transition-transform duration-700 hover:scale-101 select-none"
+            loading="eager"
+          />
+        ) : (
+          <BannerIllustration className="w-full h-full object-contain" />
+        )}
 
         {/* Ambient Top Glow Accent */}
         <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-[#E50914] to-transparent pointer-events-none" />

@@ -1,7 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { CardRole } from '../types';
 import { CARD_ASSETS, ROLE_METADATA } from '../assets/gameAssets';
-import { User, Eye, AlertTriangle } from 'lucide-react';
+import { User, Eye } from 'lucide-react';
+import {
+  BabuCardIllustration,
+  PoliceCardIllustration,
+  DakatCardIllustration,
+  ChorCardIllustration,
+  CardBackIllustration,
+} from '../assets/CardIllustrations';
 
 interface GameCardProps {
   role: CardRole | 'hidden';
@@ -94,15 +101,28 @@ export const GameCard: React.FC<GameCardProps> = ({
           />
         )}
 
-        {/* Card Visual Artwork — Direct Image Rendering */}
+        {/* Card Visual Artwork — Direct Image Rendering with SVG Fallback */}
         <div className="w-full h-full relative bg-[#0A0A0A] flex items-center justify-center p-1">
-          <img
-            src={assetPath}
-            alt={isHidden ? 'Hidden Card Chit' : roleMeta?.title || role}
-            draggable={false}
-            className="w-full h-full object-contain object-center transition-transform duration-500 group-hover:scale-102 select-none"
-            loading="eager"
-          />
+          {!imageError ? (
+            <img
+              src={assetPath}
+              alt={isHidden ? 'Hidden Card Chit' : roleMeta?.title || role}
+              draggable={false}
+              onError={() => setImageError(true)}
+              className="w-full h-full object-contain object-center transition-transform duration-500 group-hover:scale-102 select-none"
+              loading="eager"
+            />
+          ) : isHidden || !validRole ? (
+            <CardBackIllustration className="w-full h-full object-contain" />
+          ) : validRole === 'babu' ? (
+            <BabuCardIllustration className="w-full h-full object-contain" />
+          ) : validRole === 'police' ? (
+            <PoliceCardIllustration className="w-full h-full object-contain" />
+          ) : validRole === 'dakat' ? (
+            <DakatCardIllustration className="w-full h-full object-contain" />
+          ) : (
+            <ChorCardIllustration className="w-full h-full object-contain" />
+          )}
         </div>
 
         {/* Top Badges / Indicators */}

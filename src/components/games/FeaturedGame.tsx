@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Sparkles, Users, Clock, ArrowRight, Bookmark, ShieldAlert } from 'lucide-react';
 import { Game } from '../../types/game';
 import { Button } from '../common/Button';
 import { Badge } from '../common/Badge';
 import { useAuth } from '../../context/AuthContext';
+import { BannerIllustration } from '../../games/chorPoliceDakatBabu/assets/BannerIllustration';
 
 interface FeaturedGameProps {
   game: Game;
@@ -12,6 +13,7 @@ interface FeaturedGameProps {
 
 export const FeaturedGame: React.FC<FeaturedGameProps> = ({ game, onSelect }) => {
   const { user, toggleWishlistGame } = useAuth();
+  const [imageError, setImageError] = useState(false);
   const isTracked = user?.wishlistedGameIds.includes(game.id) || false;
 
   return (
@@ -107,11 +109,16 @@ export const FeaturedGame: React.FC<FeaturedGameProps> = ({ game, onSelect }) =>
         {/* Right / Artwork Column with layered visual depth */}
         <div className="lg:col-span-6 relative min-h-[300px] lg:min-h-full overflow-hidden bg-[#0A0A0A]">
           {/* Main Background Image */}
-          <img
-            src={game.banner}
-            alt={game.name}
-            className="w-full h-full object-cover object-center scale-105 transition-transform duration-1000 hover:scale-100"
-          />
+          {!imageError ? (
+            <img
+              src={game.banner}
+              alt={game.name}
+              onError={() => setImageError(true)}
+              className="w-full h-full object-cover object-center scale-105 transition-transform duration-1000 hover:scale-100"
+            />
+          ) : (
+            <BannerIllustration className="w-full h-full object-cover" />
+          )}
 
           {/* Cinematic Overlays strictly Black & Red */}
           <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A] via-transparent to-transparent lg:bg-gradient-to-r lg:from-[#141414] lg:via-transparent lg:to-black/40" />

@@ -3,6 +3,7 @@ import { Users, Clock, Bookmark, ArrowRight, Sparkles, Eye, Shield } from 'lucid
 import { Game } from '../../types/game';
 import { Badge } from '../common/Badge';
 import { useAuth } from '../../context/AuthContext';
+import { BannerIllustration } from '../../games/chorPoliceDakatBabu/assets/BannerIllustration';
 
 export interface CardLayoutConfig {
   rotation: number;      // e.g. -5.5
@@ -128,6 +129,8 @@ export const ScatteredGameCard: React.FC<ScatteredGameCardProps> = ({
               isActive ? 'scale-105 filter brightness-105 contrast-[1.03]' : 'scale-100'
             }`}
           />
+        ) : game.id === 'chor-police-dakat-babu' ? (
+          <BannerIllustration className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#181818] to-[#0A0A0A] p-6 text-center">
             <span className="text-xs font-mono-code uppercase tracking-widest text-[#FF4D4D] font-bold">

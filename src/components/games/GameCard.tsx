@@ -3,6 +3,7 @@ import { Users, Clock, Bookmark, ChevronRight, Sparkles } from 'lucide-react';
 import { Game } from '../../types/game';
 import { Badge } from '../common/Badge';
 import { useAuth } from '../../context/AuthContext';
+import { BannerIllustration } from '../../games/chorPoliceDakatBabu/assets/BannerIllustration';
 
 interface GameCardProps {
   game: Game;
@@ -123,6 +124,8 @@ export const GameCard: React.FC<GameCardProps> = ({ game, onSelect, viewMode = '
             onError={() => setImageError(true)}
             className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
           />
+        ) : game.id === 'chor-police-dakat-babu' ? (
+          <BannerIllustration className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-[#141414] text-zinc-600 font-mono-code text-xs">
             TEKKA SYSTEM
