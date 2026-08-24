@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CardRole } from '../types';
-import { CARD_ASSETS, ROLE_METADATA } from '../assets/gameAssets';
+import { CARD_ASSETS, CARD_ASSETS_FALLBACKS, ROLE_METADATA } from '../assets/gameAssets';
 import { User, Eye } from 'lucide-react';
 import {
   BabuCardIllustration,
@@ -39,9 +39,13 @@ export const GameCard: React.FC<GameCardProps> = ({
   className = '',
   flipAnimation = false,
 }) => {
-  const [imageError, setImageError] = useState(false);
   const isHidden = role === 'hidden' || !role || !CARD_ASSETS[role as CardRole];
   const validRole = !isHidden && role ? (role as CardRole) : null;
+  const roleKey = isHidden || !validRole ? 'back' : validRole;
+  const fallbacks = CARD_ASSETS_FALLBACKS[roleKey] || [CARD_ASSETS[roleKey]];
+
+  const [pathIndex, setPathIndex] = useState(0);
+  const [imageError, setImageError] = useState(false);
   const roleMeta = validRole ? ROLE_METADATA[validRole] : null;
 
   const sizeClasses = {
@@ -50,12 +54,21 @@ export const GameCard: React.FC<GameCardProps> = ({
     lg: 'w-[240px] h-[390px] sm:w-[280px] sm:h-[450px] md:w-[320px] md:h-[510px]',
   };
 
-  const assetPath = isHidden || !validRole ? CARD_ASSETS.back : CARD_ASSETS[validRole];
+  const currentSrc = fallbacks[pathIndex] || fallbacks[0];
 
   // Reset error state when role/asset changes
   useEffect(() => {
+    setPathIndex(0);
     setImageError(false);
-  }, [assetPath]);
+  }, [roleKey]);
+
+  const handleImageError = () => {
+    if (pathIndex + 1 < fallbacks.length) {
+      setPathIndex(prev => prev + 1);
+    } else {
+      setImageError(true);
+    }
+  };
 
   return (
     <div
@@ -105,10 +118,10 @@ export const GameCard: React.FC<GameCardProps> = ({
         <div className="w-full h-full relative bg-[#0A0A0A] flex items-center justify-center p-1">
           {!imageError ? (
             <img
-              src={assetPath}
+              src={currentSrc}
               alt={isHidden ? 'Hidden Card Chit' : roleMeta?.title || role}
               draggable={false}
-              onError={() => setImageError(true)}
+              onError={handleImageError}
               className="w-full h-full object-contain object-center transition-transform duration-500 group-hover:scale-102 select-none"
               loading="eager"
             />
