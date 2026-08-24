@@ -1,0 +1,6 @@
+{
+  "name": "TEKKA — Futuristic Digital Gaming Platform",
+  "description": "A premium, modern, cinematic digital gaming platform to discover, connect, and play cutting-edge multiplayer and traditional games.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

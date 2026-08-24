@@ -1,0 +1,103 @@
+{
+  "entities": {
+    "users": {
+      "title": "User Profile",
+      "description": "User profile with separate account credentials and public Tekka player identity",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "description": "Account email address" },
+        "googleDisplayName": { "type": "string", "description": "Google account display name (private)" },
+        "tekkaName": { "type": "string", "description": "Unique public Tekka gaming handle" },
+        "tekkaNameNormalized": { "type": "string", "description": "Lowercase normalized Tekka name for uniqueness verification" },
+        "displayName": { "type": "string", "description": "Display name alias for UI components" },
+        "avatarUrl": { "type": "string", "description": "Gamer avatar URL" },
+        "photoURL": { "type": "string", "description": "Google profile photo URL" },
+        "createdAt": { "type": "string", "description": "Account creation date string" },
+        "memberTier": { "type": "string", "description": "Gamer membership status tier" },
+        "bio": { "type": "string", "description": "Public player bio" },
+        "country": { "type": "string", "description": "Player regional location" },
+        "wishlistedGameIds": { "type": "array", "description": "List of tracked game IDs" },
+        "preferences": { "type": "object", "description": "Player audio and graphic preferences" },
+        "stats": { "type": "object", "description": "Tracked stats and leaderboard reputation" }
+      },
+      "required": ["uid", "email"]
+    },
+    "tekkaNames": {
+      "title": "Tekka Name Reservation",
+      "description": "Unique atomic reservations of normalized Tekka player handles",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Owner Firebase UID" },
+        "displayName": { "type": "string", "description": "Case-preserved Tekka player name" },
+        "normalized": { "type": "string", "description": "Normalized lowercase key" }
+      },
+      "required": ["uid", "displayName"]
+    },
+    "games": {
+      "title": "Game Catalog Entry",
+      "description": "Official game catalog records and rule constraints",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Canonical game identifier matching document ID" },
+        "name": { "type": "string", "description": "Human-readable game title" },
+        "slug": { "type": "string", "description": "Unique URL/app-safe identifier" },
+        "shortDescription": { "type": "string", "description": "Short summary for game discovery" },
+        "description": { "type": "string", "description": "In-depth game description" },
+        "thumbnail": { "type": "string", "description": "Card thumbnail artwork URL" },
+        "banner": { "type": "string", "description": "Banner artwork URL" },
+        "logo": { "type": "string", "description": "Optional game logo URL" },
+        "minPlayers": { "type": "number", "description": "Minimum players required by game rules" },
+        "maxPlayers": { "type": "number", "description": "Maximum players supported by game rules" },
+        "estimatedDurationMinutes": { "type": "number", "description": "Estimated duration in minutes" },
+        "estimatedDuration": { "type": "string", "description": "Formatted duration string" },
+        "status": { "type": "string", "description": "Game status: available, coming-soon, maintenance, hidden" },
+        "featured": { "type": "boolean", "description": "Whether the game is featured on platform" },
+        "engineId": { "type": "string", "description": "Optional identifier for future game engine binding" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last update timestamp" }
+      },
+      "required": ["id", "name", "slug", "minPlayers", "maxPlayers", "status"]
+    },
+    "rooms": {
+      "title": "Tekka Multiplayer Room",
+      "description": "Multiplayer table session containing real authenticated player memberships and room status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Room document ID" },
+        "roomCode": { "type": "string", "description": "Unique 6-character room code" },
+        "gameId": { "type": "string", "description": "Game identifier" },
+        "gameName": { "type": "string", "description": "Game title" },
+        "engineId": { "type": "string", "description": "Game engine identifier" },
+        "hostId": { "type": "string", "description": "Firebase UID of room creator" },
+        "players": { "type": "array", "description": "List of room participant objects" },
+        "playerCount": { "type": "number", "description": "Current number of joined players" },
+        "minPlayers": { "type": "number", "description": "Minimum player requirement" },
+        "maxPlayers": { "type": "number", "description": "Maximum player limit (e.g. 4)" },
+        "status": { "type": "string", "enum": ["WAITING", "STARTING", "PLAYING", "FINISHED", "ABANDONED"] },
+        "totalRounds": { "type": "number", "enum": [5, 10, 15, 20] },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last update timestamp" }
+      },
+      "required": ["id", "roomCode", "gameId", "hostId", "players", "playerCount", "minPlayers", "maxPlayers", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "users",
+      "description": "User profile documents keyed by Firebase Auth UID"
+    },
+    "/tekkaNames/{normalizedName}": {
+      "schema": "tekkaNames",
+      "description": "Unique reservation entries for player handles"
+    },
+    "/games/{gameId}": {
+      "schema": "games",
+      "description": "Official game catalog records"
+    },
+    "/rooms/{roomId}": {
+      "schema": "rooms",
+      "description": "Multiplayer match rooms"
+    }
+  }
+}
