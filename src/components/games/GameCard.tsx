@@ -34,11 +34,10 @@ export const GameCard: React.FC<GameCardProps> = ({ game, onSelect, viewMode = '
             <img
               src={game.thumbnail}
               alt={game.name}
+              loading="eager"
               onLoad={() => setImageLoaded(true)}
               onError={() => setImageError(true)}
-              className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${
-                imageLoaded ? 'opacity-100' : 'opacity-0'
-              }`}
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-[#181818] text-zinc-600 font-mono-code text-xs">
@@ -119,11 +118,10 @@ export const GameCard: React.FC<GameCardProps> = ({ game, onSelect, viewMode = '
           <img
             src={game.thumbnail}
             alt={game.name}
+            loading="eager"
             onLoad={() => setImageLoaded(true)}
             onError={() => setImageError(true)}
-            className={`w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 ${
-              imageLoaded ? 'opacity-100' : 'opacity-0'
-            }`}
+            className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-[#141414] text-zinc-600 font-mono-code text-xs">

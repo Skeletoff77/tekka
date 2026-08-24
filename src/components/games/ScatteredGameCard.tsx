@@ -121,12 +121,12 @@ export const ScatteredGameCard: React.FC<ScatteredGameCardProps> = ({
           <img
             src={game.banner || game.thumbnail}
             alt={game.name}
-            loading={index < 4 ? 'eager' : 'lazy'}
+            loading="eager"
             onLoad={() => setImageLoaded(true)}
             onError={() => setImageError(true)}
             className={`w-full h-full object-cover transition-transform duration-700 ease-out ${
               isActive ? 'scale-105 filter brightness-105 contrast-[1.03]' : 'scale-100'
-            } ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+            }`}
           />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#181818] to-[#0A0A0A] p-6 text-center">

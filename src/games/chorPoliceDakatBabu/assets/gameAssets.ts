@@ -8,7 +8,7 @@ import { CardRole } from '../types';
 export const CARD_ASSETS: Record<CardRole | 'back', string> = {
   babu: '/assets/games/chor-police-dakat-babu/Babu.png',
   police: '/assets/games/chor-police-dakat-babu/Police.png',
-  dakat: '/assets/games/chor-police-dakat-babu/Dakath f.png',
+  dakat: '/assets/games/chor-police-dakat-babu/dakat.png',
   chor: '/assets/games/chor-police-dakat-babu/chore.png',
   back: '/assets/games/chor-police-dakat-babu/card_back.png',
 };

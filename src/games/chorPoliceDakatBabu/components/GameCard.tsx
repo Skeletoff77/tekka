@@ -33,8 +33,9 @@ export const GameCard: React.FC<GameCardProps> = ({
   flipAnimation = false,
 }) => {
   const [imageError, setImageError] = useState(false);
-  const isHidden = role === 'hidden';
-  const roleMeta = !isHidden ? ROLE_METADATA[role] : null;
+  const isHidden = role === 'hidden' || !role || !CARD_ASSETS[role as CardRole];
+  const validRole = !isHidden && role ? (role as CardRole) : null;
+  const roleMeta = validRole ? ROLE_METADATA[validRole] : null;
 
   const sizeClasses = {
     sm: 'w-[140px] h-[230px] sm:w-[160px] sm:h-[260px]',
@@ -42,7 +43,7 @@ export const GameCard: React.FC<GameCardProps> = ({
     lg: 'w-[240px] h-[390px] sm:w-[280px] sm:h-[450px] md:w-[320px] md:h-[510px]',
   };
 
-  const assetPath = isHidden ? CARD_ASSETS.back : CARD_ASSETS[role];
+  const assetPath = isHidden || !validRole ? CARD_ASSETS.back : CARD_ASSETS[validRole];
 
   // Reset error state when role/asset changes
   useEffect(() => {
