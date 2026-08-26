@@ -16,6 +16,7 @@ import { useToast } from './ToastContext';
 import { getFirebaseAuthErrorMessage } from '../utils/authErrors';
 import { claimTekkaName, changeTekkaName as executeChangeTekkaName } from '../services/tekkaNameService';
 import { generateSuggestedTekkaName } from '../utils/usernameValidation';
+import { clearActiveRoomSession } from '../services/activeRoomSession';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -269,6 +270,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Real Firebase Sign Out
   const logout = async (): Promise<void> => {
     try {
+      clearActiveRoomSession();
       await signOut(auth);
       setUser(null);
       setNeedsTekkaNameSetup(false);

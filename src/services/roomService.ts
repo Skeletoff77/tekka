@@ -296,3 +296,20 @@ export function subscribeToRoom(
     }
   );
 }
+
+/**
+ * Fetches a snapshot of a single room by ID.
+ * Returns null if room document does not exist.
+ */
+export async function getRoom(roomId: string): Promise<TekkaRoom | null> {
+  if (!roomId) return null;
+  try {
+    const roomRef = doc(db, 'rooms', roomId);
+    const snap = await getDoc(roomRef);
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...(snap.data() as Omit<TekkaRoom, 'id'>) };
+  } catch (err) {
+    console.error('Failed to get room:', err);
+    return null;
+  }
+}

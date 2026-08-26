@@ -519,7 +519,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
             <div className="p-5 rounded-2xl bg-[#0A0A0A] border border-[#222]">
               <div className="flex items-center gap-2 text-xs font-mono-code text-zinc-500 mb-1">
                 <Bookmark className="w-3.5 h-3.5 text-[#E50914]" />
-                <span>TITLES TRACKED</span>
+                <span>TITLES SAVED</span>
               </div>
               <span className="text-2xl font-display font-black text-white">
                 {user.wishlistedGameIds.length}
@@ -529,7 +529,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
             <div className="p-5 rounded-2xl bg-[#0A0A0A] border border-[#222]">
               <div className="flex items-center gap-2 text-xs font-mono-code text-zinc-500 mb-1">
                 <Trophy className="w-3.5 h-3.5 text-[#E50914]" />
-                <span>FOUNDER RANK</span>
+                <span>PLAYER RANK</span>
               </div>
               <span className="text-2xl font-display font-black text-white">
                 #{user.stats.platformRank}
@@ -549,10 +549,10 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
             <div className="p-5 rounded-2xl bg-[#0A0A0A] border border-[#222]">
               <div className="flex items-center gap-2 text-xs font-mono-code text-zinc-500 mb-1">
                 <Sparkles className="w-3.5 h-3.5 text-[#E50914]" />
-                <span>EARLY ACCESS</span>
+                <span>ACCOUNT STATUS</span>
               </div>
               <span className="text-2xl font-display font-black text-white">
-                VIP TIER
+                VERIFIED
               </span>
             </div>
           </div>
@@ -561,7 +561,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
           <div className="p-6 sm:p-8 rounded-3xl bg-[#0A0A0A] border border-[#222] space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-display font-bold text-white tracking-wide">
-                YOUR TRACKED GAMES FOR PHASE 2
+                SAVED GAMES
               </h3>
               <button
                 type="button"
@@ -670,8 +670,8 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
               <div className="flex items-center gap-3">
                 <Bell className="w-5 h-5 text-[#E50914]" />
                 <div>
-                  <p className="text-sm font-medium text-white">Alpha Test Notifications</p>
-                  <p className="text-xs text-zinc-400">Receive email alerts when closed rooms open.</p>
+                  <p className="text-sm font-medium text-white">Game Notifications</p>
+                  <p className="text-xs text-zinc-400">Receive alerts when friends invite you to game rooms.</p>
                 </div>
               </div>
               <input

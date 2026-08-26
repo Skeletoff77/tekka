@@ -13,33 +13,6 @@ export const CARD_ASSETS: Record<CardRole | 'back', string> = {
   back: '/assets/games/chor-police-dakat-babu/card_back.png',
 };
 
-export const CARD_ASSETS_FALLBACKS: Record<CardRole | 'back', string[]> = {
-  babu: [
-    '/assets/games/chor-police-dakat-babu/Babu.png',
-    '/assets/games/chor-police-dakat-babu/babu.png',
-  ],
-  police: [
-    '/assets/games/chor-police-dakat-babu/Police.png',
-    '/assets/games/chor-police-dakat-babu/police.png',
-  ],
-  dakat: [
-    '/assets/games/chor-police-dakat-babu/Dakath f.png',
-    '/assets/games/chor-police-dakat-babu/dakat.png',
-    '/assets/games/chor-police-dakat-babu/Dakat.png',
-    '/assets/games/chor-police-dakat-babu/dakath.png',
-  ],
-  chor: [
-    '/assets/games/chor-police-dakat-babu/chore.png',
-    '/assets/games/chor-police-dakat-babu/chor.png',
-    '/assets/games/chor-police-dakat-babu/Chore.png',
-    '/assets/games/chor-police-dakat-babu/Chor.png',
-  ],
-  back: [
-    '/assets/games/chor-police-dakat-babu/card_back.png',
-    '/assets/games/chor-police-dakat-babu/card-back.png',
-  ],
-};
-
 export const GAME_ASSETS = {
   banner: '/assets/games/chor-police-dakat-babu/Banner.png',
   cardBack: '/assets/games/chor-police-dakat-babu/card_back.png',

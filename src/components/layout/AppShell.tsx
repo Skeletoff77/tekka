@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { ScatteredCardCanvas } from '../games/ScatteredCardCanvas';
@@ -13,12 +13,18 @@ import { INITIAL_GAMES } from '../../data/games';
 import { Game } from '../../types/game';
 import { TekkaRoom } from '../../types/room';
 import { getGames } from '../../services/gameService';
-import { subscribeToRoom, leaveRoom } from '../../services/roomService';
+import { subscribeToRoom, leaveRoom, getRoom } from '../../services/roomService';
 import { startGameSession } from '../../services/gameSessionService';
 import { useAuth } from '../../context/AuthContext';
 import { ChorPoliceGameView } from '../../games/chorPoliceDakatBabu/components/ChorPoliceGameView';
 import { RoomJoinModal } from '../room/RoomJoinModal';
 import { RoomLobbyView } from '../room/RoomLobbyView';
+import {
+  saveActiveRoomSession,
+  getActiveRoomSession,
+  clearActiveRoomSession,
+  subscribeToActiveRoomSession,
+} from '../../services/activeRoomSession';
 
 export const AppShell: React.FC = () => {
   const { user, isLoading: isAuthLoading, needsTekkaNameSetup, openAuthModal } = useAuth();
@@ -31,6 +37,8 @@ export const AppShell: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [isStartingGame, setIsStartingGame] = useState(false);
+  const [isRestoringRoom, setIsRestoringRoom] = useState<boolean>(true);
+  const hasAttemptedRestoreRef = useRef(false);
 
   // Authoritative game catalog retrieval from Game Registry Service
   useEffect(() => {
@@ -55,15 +63,131 @@ export const AppShell: React.FC = () => {
     };
   }, []);
 
+  // Automatic Room Restoration after Browser Refresh
+  // Waits for Firebase authentication to finish resolving before validating session
+  useEffect(() => {
+    if (isAuthLoading) return;
+
+    // Prevent duplicate concurrent restoration checks for the same session cycle
+    if (hasAttemptedRestoreRef.current) return;
+    hasAttemptedRestoreRef.current = true;
+
+    let isCancelled = false;
+
+    async function restoreActiveSession() {
+      try {
+        if (!user) {
+          // Unauthenticated user - clear any leftover session reference
+          clearActiveRoomSession();
+          if (!isCancelled) setIsRestoringRoom(false);
+          return;
+        }
+
+        const savedSession = getActiveRoomSession();
+        if (!savedSession) {
+          if (!isCancelled) setIsRestoringRoom(false);
+          return;
+        }
+
+        // Security check: verify persisted session belongs to the currently authenticated user
+        if (savedSession.playerId !== user.uid) {
+          clearActiveRoomSession();
+          if (!isCancelled) setIsRestoringRoom(false);
+          return;
+        }
+
+        // Authoritatively fetch room document from Firestore
+        const roomDoc = await getRoom(savedSession.roomId);
+        if (isCancelled) return;
+
+        if (!roomDoc) {
+          // Room no longer exists in Firestore
+          clearActiveRoomSession();
+          setIsRestoringRoom(false);
+          return;
+        }
+
+        // Discard session if room was abandoned or completed
+        if (roomDoc.status === 'ABANDONED' || roomDoc.status === 'FINISHED') {
+          clearActiveRoomSession();
+          setIsRestoringRoom(false);
+          return;
+        }
+
+        // Verify player is still an active registered participant in this room
+        const isMember = roomDoc.players.some((p) => p.id === user.uid);
+        if (!isMember) {
+          clearActiveRoomSession();
+          setIsRestoringRoom(false);
+          return;
+        }
+
+        // Restore room state and find corresponding Game definition
+        setActiveRoom(roomDoc);
+
+        const matchingGame =
+          games.find((g) => g.id === roomDoc.gameId) ||
+          INITIAL_GAMES.find((g) => g.id === roomDoc.gameId) ||
+          INITIAL_GAMES[0];
+        setSelectedGame(matchingGame);
+
+        // Restore view matching authoritative room status
+        if (roomDoc.status === 'PLAYING') {
+          setCurrentView('play-game');
+        } else if (roomDoc.status === 'WAITING' || roomDoc.status === 'STARTING') {
+          setCurrentView('room-lobby');
+        }
+
+        // Refresh timestamp in local persistence
+        saveActiveRoomSession({
+          roomId: roomDoc.id,
+          roomCode: roomDoc.roomCode,
+          gameId: roomDoc.gameId,
+          playerId: user.uid,
+        });
+      } catch (err) {
+        console.error('Failed to restore active room session after refresh:', err);
+      } finally {
+        if (!isCancelled) {
+          setIsRestoringRoom(false);
+        }
+      }
+    }
+
+    restoreActiveSession();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isAuthLoading, user?.uid, games]);
+
+  // Multi-tab Storage Event Synchronization
+  useEffect(() => {
+    const unsub = subscribeToActiveRoomSession((session) => {
+      if (!session && activeRoom) {
+        // Room was left or cleared in another tab
+        setActiveRoom(null);
+        setCurrentView('home');
+      }
+    });
+    return () => unsub();
+  }, [activeRoom]);
+
   // Listen to Active Room real-time changes
   useEffect(() => {
     if (!activeRoom?.id) return;
 
     const unsubscribe = subscribeToRoom(activeRoom.id, (updatedRoom) => {
       if (!updatedRoom || updatedRoom.status === 'ABANDONED') {
+        clearActiveRoomSession();
         setActiveRoom(null);
         setCurrentView('game-detail');
         return;
+      }
+
+      if (updatedRoom.status === 'FINISHED') {
+        // Clear active room persistence once match is concluded
+        clearActiveRoomSession();
       }
 
       setActiveRoom(updatedRoom);
@@ -127,6 +251,14 @@ export const AppShell: React.FC = () => {
 
   // When room is created or joined
   const handleRoomReady = (room: TekkaRoom) => {
+    if (user) {
+      saveActiveRoomSession({
+        roomId: room.id,
+        roomCode: room.roomCode,
+        gameId: room.gameId,
+        playerId: user.uid,
+      });
+    }
     setActiveRoom(room);
     setIsJoinModalOpen(false);
     if (room.status === 'PLAYING') {
@@ -148,8 +280,9 @@ export const AppShell: React.FC = () => {
     }
   };
 
-  // Leave room lobby
+  // Intentional room leave
   const handleLeaveRoom = async () => {
+    clearActiveRoomSession();
     if (activeRoom && user) {
       try {
         await leaveRoom(activeRoom.id, user.uid);
@@ -160,6 +293,8 @@ export const AppShell: React.FC = () => {
     setActiveRoom(null);
     setCurrentView(selectedGame ? 'game-detail' : 'home');
   };
+
+  const isInitialLoading = isAuthLoading || (isRestoringRoom && !!getActiveRoomSession());
 
   return (
     <div className="min-h-screen bg-[#050505] text-white flex flex-col selection:bg-[#E50914] selection:text-white">
@@ -175,19 +310,19 @@ export const AppShell: React.FC = () => {
 
       {/* Main Clean Content Area */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        {/* Full-bleed subtle auth state spinner if initial connection is resolving */}
-        {isAuthLoading && (
+        {/* Full-bleed subtle auth & restoration state spinner if initial connection is resolving */}
+        {isInitialLoading && (
           <div className="flex items-center justify-center py-24">
             <div className="flex flex-col items-center gap-3">
               <div className="w-8 h-8 rounded-full border-2 border-[#E50914] border-t-transparent animate-spin" />
               <p className="text-xs font-mono-code text-zinc-500 uppercase tracking-wider">
-                Connecting to Tekka Network...
+                Reconnecting to Tekka Arena...
               </p>
             </div>
           </div>
         )}
 
-        {!isAuthLoading && (
+        {!isInitialLoading && (
           <>
             {/* HOME VIEW: Pure Scattered Card Game Layout */}
             {currentView === 'home' && (

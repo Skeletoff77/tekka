@@ -1,14 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { CardRole } from '../types';
-import { CARD_ASSETS, CARD_ASSETS_FALLBACKS, ROLE_METADATA } from '../assets/gameAssets';
+import { CARD_ASSETS, ROLE_METADATA } from '../assets/gameAssets';
 import { User, Eye } from 'lucide-react';
-import {
-  BabuCardIllustration,
-  PoliceCardIllustration,
-  DakatCardIllustration,
-  ChorCardIllustration,
-  CardBackIllustration,
-} from '../assets/CardIllustrations';
 
 interface GameCardProps {
   role: CardRole | 'hidden';
@@ -41,33 +34,13 @@ export const GameCard: React.FC<GameCardProps> = ({
 }) => {
   const isHidden = role === 'hidden' || !role || !CARD_ASSETS[role as CardRole];
   const validRole = !isHidden && role ? (role as CardRole) : null;
-  const roleKey = isHidden || !validRole ? 'back' : validRole;
-  const fallbacks = CARD_ASSETS_FALLBACKS[roleKey] || [CARD_ASSETS[roleKey]];
-
-  const [pathIndex, setPathIndex] = useState(0);
-  const [imageError, setImageError] = useState(false);
+  const cardSrc = isHidden || !validRole ? CARD_ASSETS.back : CARD_ASSETS[validRole];
   const roleMeta = validRole ? ROLE_METADATA[validRole] : null;
 
   const sizeClasses = {
     sm: 'w-[140px] h-[230px] sm:w-[160px] sm:h-[260px]',
     md: 'w-[190px] h-[310px] sm:w-[220px] sm:h-[360px] md:w-[240px] md:h-[390px]',
     lg: 'w-[240px] h-[390px] sm:w-[280px] sm:h-[450px] md:w-[320px] md:h-[510px]',
-  };
-
-  const currentSrc = fallbacks[pathIndex] || fallbacks[0];
-
-  // Reset error state when role/asset changes
-  useEffect(() => {
-    setPathIndex(0);
-    setImageError(false);
-  }, [roleKey]);
-
-  const handleImageError = () => {
-    if (pathIndex + 1 < fallbacks.length) {
-      setPathIndex(prev => prev + 1);
-    } else {
-      setImageError(true);
-    }
   };
 
   return (
@@ -114,28 +87,27 @@ export const GameCard: React.FC<GameCardProps> = ({
           />
         )}
 
-        {/* Card Visual Artwork — Direct Image Rendering with SVG Fallback */}
+        {/* Card Visual Artwork — Always render exact physical PNG asset without fallback illustration */}
         <div className="w-full h-full relative bg-[#0A0A0A] flex items-center justify-center p-1">
-          {!imageError ? (
-            <img
-              src={currentSrc}
-              alt={isHidden ? 'Hidden Card Chit' : roleMeta?.title || role}
-              draggable={false}
-              onError={handleImageError}
-              className="w-full h-full object-contain object-center transition-transform duration-500 group-hover:scale-102 select-none"
-              loading="eager"
-            />
-          ) : isHidden || !validRole ? (
-            <CardBackIllustration className="w-full h-full object-contain" />
-          ) : validRole === 'babu' ? (
-            <BabuCardIllustration className="w-full h-full object-contain" />
-          ) : validRole === 'police' ? (
-            <PoliceCardIllustration className="w-full h-full object-contain" />
-          ) : validRole === 'dakat' ? (
-            <DakatCardIllustration className="w-full h-full object-contain" />
-          ) : (
-            <ChorCardIllustration className="w-full h-full object-contain" />
-          )}
+          <img
+            src={cardSrc}
+            alt={isHidden ? 'Hidden Card Chit' : roleMeta?.title || role}
+            draggable={false}
+            onLoad={() => {
+              if (isHidden) {
+                console.log('CARD BACK LOADED:', '/assets/games/chor-police-dakat-babu/card_back.png');
+              }
+            }}
+            onError={(e) => {
+              if (isHidden) {
+                console.error('CARD BACK FAILED TO LOAD:', '/assets/games/chor-police-dakat-babu/card_back.png', e);
+              } else {
+                console.error(`FAILED TO LOAD CARD ARTWORK for ${role}:`, cardSrc, e);
+              }
+            }}
+            className="w-full h-full object-contain object-center transition-transform duration-500 group-hover:scale-102 select-none"
+            loading="eager"
+          />
         </div>
 
         {/* Top Badges / Indicators */}

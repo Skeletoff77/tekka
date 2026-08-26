@@ -77,13 +77,13 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenStatusModal })
             </ul>
           </div>
 
-          {/* Early Access Newsletter */}
+          {/* Updates Newsletter */}
           <div className="md:col-span-4 space-y-3">
             <h4 className="text-xs font-mono-code uppercase tracking-wider text-white font-bold">
-              Closed Beta & Title Drops
+              Tekka Updates & News
             </h4>
             <p className="text-xs text-zinc-400">
-              Receive testing schedules, tournament announcements, and new title reveals.
+              Subscribe to receive new game updates, feature drops, and platform announcements.
             </p>
             <form onSubmit={handleSubscribe} className="flex items-center gap-2">
               <input
@@ -91,7 +91,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenStatusModal })
                 required
                 value={newsletterEmail}
                 onChange={(e) => setNewsletterEmail(e.target.value)}
-                placeholder="developer@tekka.play"
+                placeholder="player@tekka.play"
                 className="flex-1 bg-[#111] border border-[#262626] rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-[#E50914]"
               />
               <button
@@ -111,9 +111,9 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenStatusModal })
             © {new Date().getFullYear()} TEKKA GAMING PLATFORM. ALL RIGHTS RESERVED.
           </div>
           <div className="flex items-center gap-4 text-[11px]">
-            <span>PHASE 1 BUILD</span>
+            <span>ONLINE ENGINE</span>
             <span>•</span>
-            <span className="text-zinc-300">LOW LATENCY ENGINE</span>
+            <span className="text-zinc-300">REALTIME ROOM SYNC</span>
             <span>•</span>
             <span>PROPRIETARY SPEC</span>
           </div>
