@@ -254,6 +254,84 @@ export function runAllChorPoliceTests(): { passed: number; failed: number; resul
         ROLE_METADATA.dakat.points === 600 &&
         ROLE_METADATA.chor.points === 400
     );
+
+    // 25. Every round has exactly 4 unique roles (No duplicates, exactly 1 Babu, 1 Police, 1 Dakat, 1 Chor)
+    let allUniqueAcross100 = true;
+    for (let i = 0; i < 100; i++) {
+      const testState = startRoundDealing(createInitialGameState(`test-unique-${i}`, mockPlayers, 5));
+      const roles = Object.values(testState.cardAssignments);
+      const roleSet = new Set(roles);
+      if (
+        roleSet.size !== 4 ||
+        !roleSet.has('babu') ||
+        !roleSet.has('police') ||
+        !roleSet.has('dakat') ||
+        !roleSet.has('chor')
+      ) {
+        allUniqueAcross100 = false;
+        break;
+      }
+    }
+    assert(25, 'Every round has exactly 4 unique roles (Babu, Police, Dakat, Chor) across 100 deals', allUniqueAcross100);
+
+    // 26. Consecutive round derangement: No player receives the same role as the previous round
+    let consecutiveDerangementsPass = true;
+    let stateTracker = createInitialGameState('test-derangements', mockPlayers, 20);
+    for (let r = 1; r <= 15; r++) {
+      const prevAssignments = { ...stateTracker.cardAssignments };
+      stateTracker = startRoundDealing(stateTracker);
+      if (r > 1) {
+        const hasRepeat = mockPlayers.some(
+          (p) => stateTracker.cardAssignments[p.id] === prevAssignments[p.id]
+        );
+        if (hasRepeat) {
+          consecutiveDerangementsPass = false;
+          break;
+        }
+      }
+      stateTracker = submitBabuAction(stateTracker, stateTracker.babuPlayerId!, 'find-chor');
+      const hiddenP = stateTracker.players.find(
+        (p) => p.id !== stateTracker.babuPlayerId && p.id !== stateTracker.policePlayerId
+      )!;
+      stateTracker = submitPoliceAction(stateTracker, stateTracker.policePlayerId!, hiddenP.id);
+      if (r < 15) {
+        stateTracker = advanceToNextRound(stateTracker);
+      }
+    }
+    assert(
+      26,
+      'Consecutive rounds enforce derangement (0 players receive the same role as immediately previous round)',
+      consecutiveDerangementsPass
+    );
+
+    // 27. Multiple rounds do not produce a single fixed mapping (Distribution variety check)
+    const observedMappings = new Set<string>();
+    for (let i = 0; i < 50; i++) {
+      const dealtRandom = startRoundDealing(createInitialGameState(`test-variety-${i}`, mockPlayers, 5));
+      const sig = mockPlayers.map((p) => dealtRandom.cardAssignments[p.id]).join('-');
+      observedMappings.add(sig);
+    }
+    assert(
+      27,
+      'Multiple rounds produce high permutation variety (at least 8 distinct configurations observed in 50 trials)',
+      observedMappings.size >= 8
+    );
+
+    // 28. Authoritative assignment synchronization: all 4 client sanitizations match the authoritative state
+    const authState = startRoundDealing(createInitialGameState('test-auth-sync', mockPlayers, 5));
+    const allClientsMatchAuth = mockPlayers.every((p) => {
+      const sanitized = sanitizeStateForPlayer(authState, p.id);
+      return (
+        sanitized.babuPlayerId === authState.babuPlayerId &&
+        sanitized.policePlayerId === authState.policePlayerId &&
+        sanitized.myPrivateRole === authState.cardAssignments[p.id]
+      );
+    });
+    assert(
+      28,
+      'All clients receive the same authoritative assignment and synchronized public roles',
+      allClientsMatchAuth
+    );
   } catch (err: any) {
     results.push({ testNum: 0, name: 'Engine Test Execution', passed: false, message: err.message });
   }
@@ -263,3 +341,24 @@ export function runAllChorPoliceTests(): { passed: number; failed: number; resul
 
   return { passed, failed, results };
 }
+
+// Auto-run if executed directly via tsx/node CLI
+if (typeof process !== 'undefined' && process.argv && process.argv[1]?.includes('chorPoliceEngine.test')) {
+  const report = runAllChorPoliceTests();
+  console.log(`\n======================================================`);
+  console.log(`CHOR POLICE DAKAT BABU ENGINE TEST SUITE`);
+  console.log(`Results: ${report.passed}/${report.passed + report.failed} Passed (${report.failed} Failed)`);
+  console.log(`======================================================`);
+  report.results.forEach((r) => {
+    const symbol = r.passed ? '✓ PASS' : '✗ FAIL';
+    console.log(`[${symbol}] Test ${r.testNum}: ${r.name}`);
+    if (r.message) {
+      console.log(`        Reason: ${r.message}`);
+    }
+  });
+  console.log(`======================================================\n`);
+  if (report.failed > 0) {
+    process.exit(1);
+  }
+}
+

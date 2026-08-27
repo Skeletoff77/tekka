@@ -8,24 +8,13 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { BabuTargetChoice, CardRole, RoundOption } from '../games/chorPoliceDakatBabu/types';
+import { dealAuthoritativeRoles } from '../games/chorPoliceDakatBabu/engine/chorPoliceEngine';
 import {
   AuthoritativeSecretState,
   PrivatePlayerView,
   PublicGameSessionState,
 } from '../types/gameSession';
 import { TekkaRoom } from '../types/room';
-
-/**
- * Fisher-Yates authoritative card shuffler.
- */
-function shuffleCards(): CardRole[] {
-  const cards: CardRole[] = ['babu', 'police', 'dakat', 'chor'];
-  for (let i = cards.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [cards[i], cards[j]] = [cards[j], cards[i]];
-  }
-  return cards;
-}
 
 /**
  * Starts a new authoritative game session for a 4-player room.
@@ -52,17 +41,16 @@ export async function startGameSession(roomId: string, hostUid: string): Promise
     return; // Already started
   }
 
-  const shuffledRoles = shuffleCards();
-  const cardAssignments: Record<string, CardRole> = {};
+  const playerIds = room.players.map((p) => p.id);
+  const cardAssignments = dealAuthoritativeRoles(playerIds, null);
 
   let babuPlayerId = '';
   let policePlayerId = '';
   let dakatPlayerId = '';
   let chorPlayerId = '';
 
-  room.players.forEach((player, index) => {
-    const role = shuffledRoles[index];
-    cardAssignments[player.id] = role;
+  room.players.forEach((player) => {
+    const role = cardAssignments[player.id];
     if (role === 'babu') babuPlayerId = player.id;
     if (role === 'police') policePlayerId = player.id;
     if (role === 'dakat') dakatPlayerId = player.id;
@@ -299,6 +287,7 @@ export async function advanceToNextRoundAction(
 
   await runTransaction(db, async (transaction) => {
     const publicSnap = await transaction.get(publicRef);
+    const authSnap = await transaction.get(authRef);
     const roomSnap = await transaction.get(roomRef);
 
     if (!publicSnap.exists() || !roomSnap.exists()) {
@@ -306,6 +295,7 @@ export async function advanceToNextRoundAction(
     }
 
     const publicState = publicSnap.data() as PublicGameSessionState;
+    const authState = authSnap.exists() ? (authSnap.data() as AuthoritativeSecretState) : null;
     const room = roomSnap.data() as TekkaRoom;
 
     if (publicState.phase !== 'REVEAL_RESULT') {
@@ -348,19 +338,18 @@ export async function advanceToNextRoundAction(
       return;
     }
 
-    // Start Next Round with fresh shuffle
+    // Start Next Round with fresh derangement-based shuffle
     const nextRound = publicState.currentRound + 1;
-    const shuffledRoles = shuffleCards();
-    const newAssignments: Record<string, CardRole> = {};
+    const playerIds = room.players.map((p) => p.id);
+    const newAssignments = dealAuthoritativeRoles(playerIds, authState?.cardAssignments || null);
 
     let babuPlayerId = '';
     let policePlayerId = '';
     let dakatPlayerId = '';
     let chorPlayerId = '';
 
-    room.players.forEach((player, index) => {
-      const role = shuffledRoles[index];
-      newAssignments[player.id] = role;
+    room.players.forEach((player) => {
+      const role = newAssignments[player.id];
       if (role === 'babu') babuPlayerId = player.id;
       if (role === 'police') policePlayerId = player.id;
       if (role === 'dakat') dakatPlayerId = player.id;

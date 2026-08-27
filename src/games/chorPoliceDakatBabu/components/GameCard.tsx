@@ -34,7 +34,7 @@ export const GameCard: React.FC<GameCardProps> = ({
 }) => {
   const isHidden = role === 'hidden' || !role || !CARD_ASSETS[role as CardRole];
   const validRole = !isHidden && role ? (role as CardRole) : null;
-  const cardSrc = isHidden || !validRole ? CARD_ASSETS.back : CARD_ASSETS[validRole];
+  const cardSrc = isHidden || !validRole ? '/assets/games/chor-police-dakat-babu/card_back.png' : CARD_ASSETS[validRole];
   const roleMeta = validRole ? ROLE_METADATA[validRole] : null;
 
   const sizeClasses = {
@@ -92,6 +92,7 @@ export const GameCard: React.FC<GameCardProps> = ({
           <img
             src={cardSrc}
             alt={isHidden ? 'Hidden Card Chit' : roleMeta?.title || role}
+            referrerPolicy="no-referrer"
             draggable={false}
             onLoad={() => {
               if (isHidden) {

@@ -24,6 +24,7 @@ export const GameBanner: React.FC<GameBannerProps> = ({
           <img
             src={GAME_ASSETS.banner}
             alt="Chor Police Dakat Babu Banner"
+            referrerPolicy="no-referrer"
             draggable={false}
             onError={() => setImageError(true)}
             className="w-full h-auto max-h-[420px] object-contain object-center transition-transform duration-700 hover:scale-101 select-none"

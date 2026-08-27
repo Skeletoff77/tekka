@@ -23,8 +23,30 @@ export class GameEngineError extends Error {
   }
 }
 
+export const CHOR_POLICE_ROLES: readonly CardRole[] = ['babu', 'police', 'dakat', 'chor'] as const;
+
 /**
- * Fisher-Yates array shuffle
+ * Generates all 24 permutations of the 4 roles.
+ */
+export function getAllRolePermutations(roles: readonly CardRole[] = CHOR_POLICE_ROLES): CardRole[][] {
+  const result: CardRole[][] = [];
+  const permute = (arr: CardRole[], m: CardRole[] = []) => {
+    if (arr.length === 0) {
+      result.push(m);
+    } else {
+      for (let i = 0; i < arr.length; i++) {
+        const curr = arr.slice();
+        const next = curr.splice(i, 1);
+        permute(curr.slice(), m.concat(next));
+      }
+    }
+  };
+  permute([...roles]);
+  return result;
+}
+
+/**
+ * Fisher-Yates array shuffle (unbiased).
  */
 export function shuffleArray<T>(array: readonly T[]): T[] {
   const arr = [...array];
@@ -33,6 +55,58 @@ export function shuffleArray<T>(array: readonly T[]): T[] {
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;
+}
+
+/**
+ * Unbiased role dealer for 4-player match.
+ * 
+ * Rules:
+ * 1. Each round contains exactly one Babu, one Police, one Dakat, and one Chor (0 duplicates).
+ * 2. Each player receives exactly one role.
+ * 3. In consecutive rounds (when previousAssignments is supplied), avoids giving any player
+ *    the same role they held in the previous round (derangement of the 4-role distribution).
+ * 4. Unbiased random selection across all valid derangements (or all 24 permutations in Round 1).
+ */
+export function dealAuthoritativeRoles(
+  playerIds: string[],
+  previousAssignments?: Record<string, CardRole> | null
+): Record<string, CardRole> {
+  if (playerIds.length !== 4) {
+    throw new GameEngineError(`Dealing requires exactly 4 players. Provided: ${playerIds.length}`);
+  }
+
+  const allPerms = getAllRolePermutations(CHOR_POLICE_ROLES);
+
+  if (previousAssignments) {
+    const hasValidPrev = playerIds.every(
+      (id) => previousAssignments[id] && CHOR_POLICE_ROLES.includes(previousAssignments[id])
+    );
+
+    if (hasValidPrev) {
+      // Find derangements: permutations where no player gets their previous role
+      const derangements = allPerms.filter((perm) => {
+        return playerIds.every((pId, idx) => perm[idx] !== previousAssignments[pId]);
+      });
+
+      if (derangements.length > 0) {
+        const shuffledDerangements = shuffleArray(derangements);
+        const chosenPerm = shuffledDerangements[0];
+        const assignments: Record<string, CardRole> = {};
+        playerIds.forEach((pId, idx) => {
+          assignments[pId] = chosenPerm[idx];
+        });
+        return assignments;
+      }
+    }
+  }
+
+  // Round 1 or fallback: unbiased Fisher-Yates shuffle across the 4 roles
+  const shuffledRoles = shuffleArray(CHOR_POLICE_ROLES);
+  const assignments: Record<string, CardRole> = {};
+  playerIds.forEach((pId, idx) => {
+    assignments[pId] = shuffledRoles[idx];
+  });
+  return assignments;
 }
 
 /**
@@ -88,16 +162,21 @@ export function startRoundDealing(state: ChorPoliceGameState): ChorPoliceGameSta
     throw new GameEngineError('Cannot deal without exactly 4 players.');
   }
 
-  const deck: CardRole[] = shuffleArray(['babu', 'police', 'dakat', 'chor'] as const);
-  const cardAssignments: Record<string, CardRole> = {};
+  // Check if we have previous assignments to prevent repeated roles across consecutive rounds
+  const previousAssignments =
+    state.cardAssignments && Object.keys(state.cardAssignments).length === 4
+      ? state.cardAssignments
+      : null;
+
+  const playerIds = state.players.map((p) => p.id);
+  const cardAssignments = dealAuthoritativeRoles(playerIds, previousAssignments);
   const publicRoles: Record<string, CardRole | 'hidden'> = {};
 
   let babuPlayerId: string | null = null;
   let policePlayerId: string | null = null;
 
-  state.players.forEach((player, index) => {
-    const role = deck[index];
-    cardAssignments[player.id] = role;
+  state.players.forEach((player) => {
+    const role = cardAssignments[player.id];
 
     if (role === 'babu') {
       babuPlayerId = player.id;
