@@ -80,6 +80,66 @@
         "updatedAt": { "type": "string", "description": "Last update timestamp" }
       },
       "required": ["id", "roomCode", "gameId", "hostId", "players", "playerCount", "minPlayers", "maxPlayers", "status"]
+    },
+    "admins": {
+      "title": "Admin Record",
+      "description": "Authorized Tekka admin account privileges and role bindings",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Admin Firebase Auth UID" },
+        "email": { "type": "string", "description": "Admin email address" },
+        "role": { "type": "string", "description": "Admin role: super_admin, admin, moderator" },
+        "createdAt": { "type": "string", "description": "When admin status was granted" },
+        "lastLoginAt": { "type": "string", "description": "Last admin portal login timestamp" },
+        "grantedBy": { "type": "string", "description": "System or admin UID who granted access" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "presence": {
+      "title": "Live Visitor Presence",
+      "description": "Real-time heartbeat presence record for anonymous and authenticated visitors",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "description": "Unique session identifier" },
+        "uid": { "type": "string", "description": "Firebase UID if authenticated" },
+        "tekkaName": { "type": "string", "description": "Tekka player handle if authenticated" },
+        "isAnonymous": { "type": "boolean", "description": "Whether visitor is anonymous" },
+        "location": { "type": "string", "enum": ["game-hub", "room-lobby", "in-game", "admin-portal"] },
+        "roomId": { "type": "string", "description": "Active room ID if inside a room" },
+        "gameId": { "type": "string", "description": "Active game ID if viewing or playing a game" },
+        "lastHeartbeat": { "type": "number", "description": "Epoch timestamp of last heartbeat" },
+        "createdAt": { "type": "string", "description": "When session started" }
+      },
+      "required": ["sessionId", "isAnonymous", "location", "lastHeartbeat"]
+    },
+    "adminAuditLogs": {
+      "title": "Admin Audit Log",
+      "description": "Immutable security log of all administrative actions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Audit log document ID" },
+        "adminUid": { "type": "string", "description": "UID of acting admin" },
+        "adminEmail": { "type": "string", "description": "Email of acting admin" },
+        "action": { "type": "string", "description": "Admin action code" },
+        "targetType": { "type": "string", "description": "Target entity type" },
+        "targetId": { "type": "string", "description": "Target document or entity ID" },
+        "targetName": { "type": "string", "description": "Target descriptive name" },
+        "timestamp": { "type": "number", "description": "Epoch timestamp of action" },
+        "result": { "type": "string", "enum": ["SUCCESS", "FAILURE"] },
+        "details": { "type": "object", "description": "Contextual details and parameters" }
+      },
+      "required": ["id", "adminUid", "action", "timestamp", "result"]
+    },
+    "adminStats": {
+      "title": "Admin Statistics Snapshot",
+      "description": "Pre-computed or cached operational metrics and statistics",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Statistics document key" },
+        "updatedAt": { "type": "number", "description": "Epoch timestamp of last update" },
+        "metrics": { "type": "object", "description": "Aggregated metrics map" }
+      },
+      "required": ["id", "updatedAt", "metrics"]
     }
   },
   "firestore": {
@@ -98,6 +158,22 @@
     "/rooms/{roomId}": {
       "schema": "rooms",
       "description": "Multiplayer match rooms"
+    },
+    "/admins/{adminId}": {
+      "schema": "admins",
+      "description": "Authorized admin users registry"
+    },
+    "/presence/{sessionId}": {
+      "schema": "presence",
+      "description": "Live visitor and user heartbeat presence"
+    },
+    "/adminAuditLogs/{logId}": {
+      "schema": "adminAuditLogs",
+      "description": "Admin activity audit log trail"
+    },
+    "/adminStats/{statId}": {
+      "schema": "adminStats",
+      "description": "Aggregated platform statistics snapshots"
     }
   }
 }

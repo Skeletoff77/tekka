@@ -177,6 +177,7 @@ export const ChorPoliceGameView: React.FC<ChorPoliceGameViewProps> = ({
   const formattedPlayers = room.players.map((p) => ({
     id: p.id,
     name: p.tekkaName,
+    seatIndex: p.seatIndex,
     isHuman: true,
     isCurrentUser: p.id === currentUserId,
   }));
@@ -420,7 +421,9 @@ export const ChorPoliceGameView: React.FC<ChorPoliceGameViewProps> = ({
           cumulativeScores={publicState.cumulativeScores}
           winners={publicState.winners || []}
           isTie={publicState.isTie}
+          finalStandings={publicState.finalStandings}
           totalRounds={totalRounds}
+          isHost={room.hostId === currentUserId}
           onPlayAgain={handlePlayAgain}
           onExit={onExit}
         />

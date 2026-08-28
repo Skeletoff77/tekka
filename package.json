@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx src/games/chorPoliceDakatBabu/engine/__tests__/chorPoliceEngine.test.ts && tsx src/services/__tests__/multiplayerReconnection.test.ts"
+    "test": "tsx src/games/chorPoliceDakatBabu/engine/__tests__/chorPoliceEngine.test.ts && tsx src/services/__tests__/multiplayerReconnection.test.ts && tsx src/services/__tests__/endOfGameFlow.test.ts && tsx src/services/__tests__/adminPortalSecurity.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

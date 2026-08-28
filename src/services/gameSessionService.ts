@@ -8,7 +8,10 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { BabuTargetChoice, CardRole, RoundOption } from '../games/chorPoliceDakatBabu/types';
-import { dealAuthoritativeRoles } from '../games/chorPoliceDakatBabu/engine/chorPoliceEngine';
+import {
+  dealAuthoritativeRoles,
+  calculateFinalStandings,
+} from '../games/chorPoliceDakatBabu/engine/chorPoliceEngine';
 import {
   AuthoritativeSecretState,
   PrivatePlayerView,
@@ -127,6 +130,7 @@ export async function startGameSession(roomId: string, hostUid: string): Promise
     lastRoundResult: null,
     winners: null,
     isTie: false,
+    finalStandings: null,
     updatedAt: now,
   };
   await setDoc(publicStateRef, publicState);
@@ -311,23 +315,21 @@ export async function advanceToNextRoundAction(
 
     // Check if match is finished
     if (publicState.currentRound >= publicState.totalRounds) {
-      // Calculate Winners
-      const scores = Object.entries(publicState.cumulativeScores);
-      let maxScore = -1;
-      for (const [, score] of scores) {
-        if (score > maxScore) maxScore = score;
-      }
-
-      const winners = scores
-        .filter(([, score]) => score === maxScore)
-        .map(([id]) => id);
-
+      // Calculate Authoritative Final Standings & Winners
+      const playerList = room.players.map((p) => ({
+        id: p.id,
+        name: p.tekkaName,
+      }));
+      const finalStandings = calculateFinalStandings(playerList, publicState.cumulativeScores);
+      const maxScore = finalStandings.length > 0 ? finalStandings[0].score : 0;
+      const winners = finalStandings.filter((p) => p.score === maxScore).map((p) => p.playerId);
       const isTie = winners.length > 1;
 
       transaction.update(publicRef, {
         phase: 'GAME_OVER',
         winners,
         isTie,
+        finalStandings,
         updatedAt: now,
       });
 

@@ -19,6 +19,8 @@ import { useAuth } from '../../context/AuthContext';
 import { ChorPoliceGameView } from '../../games/chorPoliceDakatBabu/components/ChorPoliceGameView';
 import { RoomJoinModal } from '../room/RoomJoinModal';
 import { RoomLobbyView } from '../room/RoomLobbyView';
+import { AdminPortal } from '../admin/AdminPortal';
+import { startPresenceHeartbeat } from '../../services/presenceService';
 import {
   saveActiveRoomSession,
   getActiveRoomSession,
@@ -26,11 +28,24 @@ import {
   subscribeToActiveRoomSession,
 } from '../../services/activeRoomSession';
 
+export type AppView = 'home' | 'game-detail' | 'room-lobby' | 'play-game' | 'profile' | 'admin' | '404';
+
 export const AppShell: React.FC = () => {
   const { user, isLoading: isAuthLoading, needsTekkaNameSetup, openAuthModal } = useAuth();
   const [games, setGames] = useState<Game[]>([]);
   const [isGamesLoading, setIsGamesLoading] = useState<boolean>(true);
-  const [currentView, setCurrentView] = useState<'home' | 'game-detail' | 'room-lobby' | 'play-game' | 'profile' | '404'>('home');
+  const [currentView, setCurrentView] = useState<AppView>(() => {
+    // Detect if initial URL points to /admin or #admin
+    if (
+      typeof window !== 'undefined' &&
+      (window.location.pathname.startsWith('/admin') ||
+        window.location.hash === '#admin' ||
+        window.location.search.includes('view=admin'))
+    ) {
+      return 'admin';
+    }
+    return 'home';
+  });
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [activeRoom, setActiveRoom] = useState<TekkaRoom | null>(null);
   const [isJoinModalOpen, setIsJoinModalOpen] = useState<boolean>(false);
@@ -39,6 +54,50 @@ export const AppShell: React.FC = () => {
   const [isStartingGame, setIsStartingGame] = useState(false);
   const [isRestoringRoom, setIsRestoringRoom] = useState<boolean>(true);
   const hasAttemptedRestoreRef = useRef(false);
+
+  // Synchronize browser history and popstate for /admin route
+  useEffect(() => {
+    const handlePopState = () => {
+      if (
+        window.location.pathname.startsWith('/admin') ||
+        window.location.hash === '#admin' ||
+        window.location.search.includes('view=admin')
+      ) {
+        setCurrentView('admin');
+      } else if (currentView === 'admin') {
+        setCurrentView('home');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('hashchange', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('hashchange', handlePopState);
+    };
+  }, [currentView]);
+
+  // Global visitor and user presence heartbeat engine
+  useEffect(() => {
+    let location: 'game-hub' | 'room-lobby' | 'in-game' | 'admin-portal' = 'game-hub';
+    if (currentView === 'admin') {
+      location = 'admin-portal';
+    } else if (currentView === 'play-game') {
+      location = 'in-game';
+    } else if (currentView === 'room-lobby') {
+      location = 'room-lobby';
+    }
+
+    const stopHeartbeat = startPresenceHeartbeat({
+      uid: user?.uid,
+      tekkaName: user?.tekkaName || user?.displayName || undefined,
+      location,
+      roomId: activeRoom?.id,
+      gameId: activeRoom?.gameId || selectedGame?.id,
+    });
+
+    return () => stopHeartbeat();
+  }, [currentView, user?.uid, user?.tekkaName, user?.displayName, activeRoom?.id, activeRoom?.gameId, selectedGame?.id]);
 
   // Authoritative game catalog retrieval from Game Registry Service
   useEffect(() => {
@@ -64,11 +123,13 @@ export const AppShell: React.FC = () => {
   }, []);
 
   // Automatic Room Restoration after Browser Refresh
-  // Waits for Firebase authentication to finish resolving before validating session
   useEffect(() => {
     if (isAuthLoading) return;
+    if (currentView === 'admin') {
+      setIsRestoringRoom(false);
+      return;
+    }
 
-    // Prevent duplicate concurrent restoration checks for the same session cycle
     if (hasAttemptedRestoreRef.current) return;
     hasAttemptedRestoreRef.current = true;
 
@@ -77,7 +138,6 @@ export const AppShell: React.FC = () => {
     async function restoreActiveSession() {
       try {
         if (!user) {
-          // Unauthenticated user - clear any leftover session reference
           clearActiveRoomSession();
           if (!isCancelled) setIsRestoringRoom(false);
           return;
@@ -89,32 +149,21 @@ export const AppShell: React.FC = () => {
           return;
         }
 
-        // Security check: verify persisted session belongs to the currently authenticated user
         if (savedSession.playerId !== user.uid) {
           clearActiveRoomSession();
           if (!isCancelled) setIsRestoringRoom(false);
           return;
         }
 
-        // Authoritatively fetch room document from Firestore
         const roomDoc = await getRoom(savedSession.roomId);
         if (isCancelled) return;
 
-        if (!roomDoc) {
-          // Room no longer exists in Firestore
+        if (!roomDoc || roomDoc.status === 'ABANDONED') {
           clearActiveRoomSession();
           setIsRestoringRoom(false);
           return;
         }
 
-        // Discard session if room was abandoned or completed
-        if (roomDoc.status === 'ABANDONED' || roomDoc.status === 'FINISHED') {
-          clearActiveRoomSession();
-          setIsRestoringRoom(false);
-          return;
-        }
-
-        // Verify player is still an active registered participant in this room
         const isMember = roomDoc.players.some((p) => p.id === user.uid);
         if (!isMember) {
           clearActiveRoomSession();
@@ -122,7 +171,6 @@ export const AppShell: React.FC = () => {
           return;
         }
 
-        // Restore room state and find corresponding Game definition
         setActiveRoom(roomDoc);
 
         const matchingGame =
@@ -131,14 +179,12 @@ export const AppShell: React.FC = () => {
           INITIAL_GAMES[0];
         setSelectedGame(matchingGame);
 
-        // Restore view matching authoritative room status
-        if (roomDoc.status === 'PLAYING') {
+        if (roomDoc.status === 'PLAYING' || roomDoc.status === 'FINISHED') {
           setCurrentView('play-game');
         } else if (roomDoc.status === 'WAITING' || roomDoc.status === 'STARTING') {
           setCurrentView('room-lobby');
         }
 
-        // Refresh timestamp in local persistence
         saveActiveRoomSession({
           roomId: roomDoc.id,
           roomCode: roomDoc.roomCode,
@@ -159,13 +205,12 @@ export const AppShell: React.FC = () => {
     return () => {
       isCancelled = true;
     };
-  }, [isAuthLoading, user?.uid, games]);
+  }, [isAuthLoading, user?.uid, games, currentView]);
 
   // Multi-tab Storage Event Synchronization
   useEffect(() => {
     const unsub = subscribeToActiveRoomSession((session) => {
       if (!session && activeRoom) {
-        // Room was left or cleared in another tab
         setActiveRoom(null);
         setCurrentView('home');
       }
@@ -185,15 +230,9 @@ export const AppShell: React.FC = () => {
         return;
       }
 
-      if (updatedRoom.status === 'FINISHED') {
-        // Clear active room persistence once match is concluded
-        clearActiveRoomSession();
-      }
-
       setActiveRoom(updatedRoom);
 
-      // Auto-transition to play view when status becomes PLAYING
-      if (updatedRoom.status === 'PLAYING') {
+      if (updatedRoom.status === 'PLAYING' || updatedRoom.status === 'FINISHED') {
         setCurrentView('play-game');
       } else if (updatedRoom.status === 'WAITING') {
         setCurrentView('room-lobby');
@@ -231,6 +270,11 @@ export const AppShell: React.FC = () => {
     if (view === 'games' || view === 'about') {
       setCurrentView('home');
       return;
+    }
+    if (view === 'admin') {
+      if (typeof window !== 'undefined') {
+        window.history.pushState(null, '', '/admin');
+      }
     }
     setCurrentView(view as any);
   };
@@ -294,6 +338,19 @@ export const AppShell: React.FC = () => {
     setCurrentView(selectedGame ? 'game-detail' : 'home');
   };
 
+  // Handle return from admin portal
+  const handleReturnFromAdmin = () => {
+    if (typeof window !== 'undefined') {
+      window.history.pushState(null, '', '/');
+    }
+    setCurrentView('home');
+  };
+
+  // Dedicated full-page Admin Portal view
+  if (currentView === 'admin') {
+    return <AdminPortal onReturnHome={handleReturnFromAdmin} />;
+  }
+
   const isInitialLoading = isAuthLoading || (isRestoringRoom && !!getActiveRoomSession());
 
   return (
@@ -310,7 +367,6 @@ export const AppShell: React.FC = () => {
 
       {/* Main Clean Content Area */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        {/* Full-bleed subtle auth & restoration state spinner if initial connection is resolving */}
         {isInitialLoading && (
           <div className="flex items-center justify-center py-24">
             <div className="flex flex-col items-center gap-3">
@@ -458,3 +514,4 @@ export const AppShell: React.FC = () => {
     </div>
   );
 };
+

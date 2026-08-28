@@ -61,6 +61,16 @@ export interface RoundResult {
   pointsEarned: Record<string, number>;
 }
 
+export interface PlayerFinalStanding {
+  playerId: string;
+  playerName: string;
+  score: number;
+  rank: number;
+  rankLabel: string;
+  isWinner: boolean;
+  isTie: boolean;
+}
+
 export interface ChorPoliceGameState {
   gameId: string;
   engineId: 'chor-police-dakat-babu';
@@ -99,6 +109,7 @@ export interface ChorPoliceGameState {
   // Game Winner(s)
   winners: string[]; // Player IDs (multiple in case of tie)
   isTie: boolean;
+  finalStandings?: PlayerFinalStanding[] | null;
 
   // Metadata
   createdAt: number;

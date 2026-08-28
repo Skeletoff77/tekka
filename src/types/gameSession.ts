@@ -2,6 +2,7 @@ import {
   BabuTargetChoice,
   CardRole,
   GamePhase,
+  PlayerFinalStanding,
   RoundOption,
   RoundResult,
 } from '../games/chorPoliceDakatBabu/types';
@@ -26,6 +27,7 @@ export interface PublicGameSessionState {
   lastRoundResult: RoundResult | null;
   winners: string[] | null;
   isTie: boolean;
+  finalStandings?: PlayerFinalStanding[] | null;
   updatedAt: string;
 }
 

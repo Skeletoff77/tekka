@@ -9,6 +9,7 @@ import {
   ChorPoliceGameState,
   GamePhase,
   PlayerClientGameState,
+  PlayerFinalStanding,
   PlayerSeat,
   ROLE_POINTS,
   RoundOption,
@@ -333,6 +334,74 @@ export function submitPoliceAction(
 }
 
 /**
+ * Deterministic final standings calculator.
+ * 
+ * Rules:
+ * 1. Players sorted primarily by final cumulative score descending (highest score first).
+ * 2. Secondary sort: player name ascending, then playerId ascending for consistent tie handling across all clients.
+ * 3. Competition ranking computed (1st, 2nd, 3rd, 4th) with tie detection.
+ * 4. Supports 2, 3, or 4 players seamlessly.
+ */
+export function calculateFinalStandings(
+  players: readonly { id: string; name: string }[],
+  cumulativeScores: Record<string, number>
+): PlayerFinalStanding[] {
+  const playerScores = players.map((p) => ({
+    playerId: p.id,
+    playerName: p.name,
+    score: cumulativeScores[p.id] ?? 0,
+  }));
+
+  // Deterministic sort
+  playerScores.sort((a, b) => {
+    if (b.score !== a.score) {
+      return b.score - a.score;
+    }
+    const nameCmp = a.playerName.localeCompare(b.playerName);
+    if (nameCmp !== 0) return nameCmp;
+    return a.playerId.localeCompare(b.playerId);
+  });
+
+  const maxScore = playerScores.length > 0 ? playerScores[0].score : 0;
+  const standings: PlayerFinalStanding[] = [];
+  let currentRank = 1;
+
+  for (let i = 0; i < playerScores.length; i++) {
+    const item = playerScores[i];
+    if (i > 0 && item.score < playerScores[i - 1].score) {
+      currentRank = i + 1;
+    }
+
+    const isTiedWithOther = playerScores.some(
+      (other, otherIdx) => otherIdx !== i && other.score === item.score
+    );
+
+    let rankLabel = '';
+    if (currentRank === 1) {
+      rankLabel = isTiedWithOther ? '1st Place (Tied)' : '1st Place — Winner';
+    } else if (currentRank === 2) {
+      rankLabel = isTiedWithOther ? '2nd Place (Tied)' : '2nd Place';
+    } else if (currentRank === 3) {
+      rankLabel = isTiedWithOther ? '3rd Place (Tied)' : '3rd Place';
+    } else {
+      rankLabel = isTiedWithOther ? `${currentRank}th Place (Tied)` : `${currentRank}th Place`;
+    }
+
+    standings.push({
+      playerId: item.playerId,
+      playerName: item.playerName,
+      score: item.score,
+      rank: currentRank,
+      rankLabel,
+      isWinner: item.score === maxScore,
+      isTie: isTiedWithOther,
+    });
+  }
+
+  return standings;
+}
+
+/**
  * Transitions from REVEAL_RESULT to next round or GAME_OVER
  */
 export function advanceToNextRound(state: ChorPoliceGameState): ChorPoliceGameState {
@@ -342,18 +411,9 @@ export function advanceToNextRound(state: ChorPoliceGameState): ChorPoliceGameSt
 
   // Check if final round reached
   if (state.currentRound >= state.totalRounds) {
-    // Determine winner(s)
-    let maxScore = -1;
-    for (const score of Object.values(state.cumulativeScores)) {
-      if (score > maxScore) {
-        maxScore = score;
-      }
-    }
-
-    const winners = Object.entries(state.cumulativeScores)
-      .filter(([_, score]) => score === maxScore)
-      .map(([pId]) => pId);
-
+    const finalStandings = calculateFinalStandings(state.players, state.cumulativeScores);
+    const maxScore = finalStandings.length > 0 ? finalStandings[0].score : 0;
+    const winners = finalStandings.filter((p) => p.score === maxScore).map((p) => p.playerId);
     const isTie = winners.length > 1;
 
     return {
@@ -361,6 +421,7 @@ export function advanceToNextRound(state: ChorPoliceGameState): ChorPoliceGameSt
       phase: 'GAME_OVER',
       winners,
       isTie,
+      finalStandings,
       updatedAt: Date.now(),
     };
   }
