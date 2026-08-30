@@ -10,7 +10,8 @@ import {
   Zap, 
   CheckCircle2, 
   HelpCircle,
-  Cpu
+  Cpu,
+  AlertTriangle
 } from 'lucide-react';
 import { Game } from '../../types/game';
 import { Button } from '../common/Button';
@@ -18,10 +19,13 @@ import { Badge } from '../common/Badge';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { Modal } from '../common/Modal';
-import { GameCard } from '../../games/chorPoliceDakatBabu/components/GameCard';
-import { ROLE_METADATA } from '../../games/chorPoliceDakatBabu/assets/gameAssets';
+import { GameCard as ChorPoliceGameCard } from '../../games/chorPoliceDakatBabu/components/GameCard';
+import { ROLE_METADATA as CHOR_POLICE_ROLE_METADATA } from '../../games/chorPoliceDakatBabu/assets/gameAssets';
 import { CardRole } from '../../games/chorPoliceDakatBabu/types';
-import { BannerIllustration } from '../../games/chorPoliceDakatBabu/assets/BannerIllustration';
+import { BannerIllustration as ChorPoliceBannerIllustration } from '../../games/chorPoliceDakatBabu/assets/BannerIllustration';
+import { ChakrantoCard } from '../../games/chakranto/components/ChakrantoCard';
+import { CHAKRANTO_CHARACTERS } from '../../games/chakranto/assets/chakrantoAssets';
+import { ChakrantoCharacter } from '../../games/chakranto/types';
 
 interface GameDetailsProps {
   game: Game;
@@ -132,8 +136,27 @@ export const GameDetails: React.FC<GameDetailsProps> = ({
               className="w-full h-full object-cover object-center"
               onError={() => setImageError(true)}
             />
+          ) : game.id === 'chakranto' ? (
+            <div className="w-full h-full flex flex-col items-center justify-center p-8 bg-[#1A0A0A] border border-red-900/60 text-center">
+              <AlertTriangle className="w-10 h-10 text-red-500 mb-2" />
+              <span className="text-sm font-mono-code font-bold text-red-400 uppercase">
+                CHAKRANTO ASSET LOAD ERROR
+              </span>
+              <span className="text-xs font-mono-code text-zinc-500 mt-1 break-all">
+                {game.banner}
+              </span>
+            </div>
+          ) : game.id === 'chor-police-dakat-babu' ? (
+            <ChorPoliceBannerIllustration title={game.name} />
           ) : (
-            <BannerIllustration title={game.name} />
+            <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#181818] to-[#0A0A0A] p-6 text-center">
+              <span className="text-xs font-mono-code uppercase tracking-widest text-[#FF4D4D] font-bold">
+                TEKKA ORIGINAL
+              </span>
+              <span className="text-2xl font-display font-bold text-white mt-1">
+                {game.name}
+              </span>
+            </div>
           )}
 
           {/* Dark Dramatic Overlays */}
@@ -271,39 +294,63 @@ export const GameDetails: React.FC<GameDetailsProps> = ({
             </div>
           </div>
 
-          {/* Authentic Role Cards Showcase */}
+          {/* Authentic Role / Character Cards Showcase */}
           <div className="p-6 sm:p-8 rounded-3xl bg-[#0A0A0A] border border-[#222222] space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#1C1C1C] pb-4">
               <div>
                 <h3 className="text-lg font-display font-bold text-white uppercase tracking-wider flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-[#E50914]" />
-                  The 4 Secret Chits & Roles
+                  {game.id === 'chakranto' ? 'The 5 Strategic Character Cards' : 'The 4 Secret Chits & Roles'}
                 </h3>
                 <p className="text-xs text-zinc-400 mt-1">
-                  Authentic deck illustrations dealt at random to all four players
+                  {game.id === 'chakranto'
+                    ? '15-card deck with 3 copies per character, dealt secretly to all players'
+                    : 'Authentic deck illustrations dealt at random to all four players'}
                 </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {(['babu', 'police', 'dakat', 'chor'] as CardRole[]).map((role) => {
-                const meta = ROLE_METADATA[role];
-                return (
-                  <div key={role} className="flex flex-col items-center gap-2.5">
-                    <GameCard
-                      role={role}
-                      isRevealed={true}
-                      size="md"
-                      className="shadow-xl"
-                    />
-                    <div className="text-center">
-                      <p className="text-xs font-display font-bold text-white uppercase">{meta.bengaliTitle}</p>
-                      <p className="text-[10px] font-mono-code text-[#E50914] font-semibold">{meta.points} PTS</p>
+            {game.id === 'chakranto' ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+                {(['brahmodoetto', 'kalu_dakat', 'petukchondro', 'bir_bikrom', 'ginner_badsha'] as ChakrantoCharacter[]).map((char) => {
+                  const meta = CHAKRANTO_CHARACTERS[char];
+                  return (
+                    <div key={char} className="flex flex-col items-center gap-2">
+                      <ChakrantoCard
+                        character={char}
+                        size="sm"
+                        showDetails={false}
+                        className="shadow-xl"
+                      />
+                      <div className="text-center">
+                        <p className="text-xs font-display font-bold text-white uppercase">{meta.name}</p>
+                        <p className="text-[10px] font-mono-code text-zinc-400">{meta.bengaliName}</p>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            ) : game.id === 'chor-police-dakat-babu' ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {(['babu', 'police', 'dakat', 'chor'] as CardRole[]).map((role) => {
+                  const meta = CHOR_POLICE_ROLE_METADATA[role];
+                  return (
+                    <div key={role} className="flex flex-col items-center gap-2.5">
+                      <ChorPoliceGameCard
+                        role={role}
+                        isRevealed={true}
+                        size="md"
+                        className="shadow-xl"
+                      />
+                      <div className="text-center">
+                        <p className="text-xs font-display font-bold text-white uppercase">{meta.bengaliTitle}</p>
+                        <p className="text-[10px] font-mono-code text-[#E50914] font-semibold">{meta.points} PTS</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
 
           {/* Rules & Flow */}
@@ -409,7 +456,9 @@ export const GameDetails: React.FC<GameDetailsProps> = ({
             <div>
               <p className="text-xs font-semibold text-white">How to play?</p>
               <p className="text-[11px] text-zinc-500 mt-0.5">
-                Join a room with 4 players. Roles are secretly dealt: Babu reveals, Police deduces the Chor!
+                {game.id === 'chakranto'
+                  ? 'Join a room with 3–6 players. Declare actions, bluff character powers, call challenges, and survive elimination!'
+                  : 'Join a room with 4 players. Roles are secretly dealt: Babu reveals, Police deduces the Chor!'}
               </p>
             </div>
           </div>

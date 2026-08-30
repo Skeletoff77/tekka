@@ -15,8 +15,10 @@ import { TekkaRoom } from '../../types/room';
 import { getGames } from '../../services/gameService';
 import { subscribeToRoom, leaveRoom, getRoom } from '../../services/roomService';
 import { startGameSession } from '../../services/gameSessionService';
+import { startChakrantoGameSession } from '../../services/chakrantoSessionService';
 import { useAuth } from '../../context/AuthContext';
 import { ChorPoliceGameView } from '../../games/chorPoliceDakatBabu/components/ChorPoliceGameView';
+import { ChakrantoGameView } from '../../games/chakranto/components/ChakrantoGameView';
 import { RoomJoinModal } from '../room/RoomJoinModal';
 import { RoomLobbyView } from '../room/RoomLobbyView';
 import { AdminPortal } from '../admin/AdminPortal';
@@ -317,7 +319,11 @@ export const AppShell: React.FC = () => {
     if (!activeRoom || !user) return;
     try {
       setIsStartingGame(true);
-      await startGameSession(activeRoom.id, user.uid);
+      if (activeRoom.gameId === 'chakranto') {
+        await startChakrantoGameSession(activeRoom.id, user.uid);
+      } else {
+        await startGameSession(activeRoom.id, user.uid);
+      }
       setCurrentView('play-game');
     } finally {
       setIsStartingGame(false);
@@ -444,15 +450,23 @@ export const AppShell: React.FC = () => {
               </div>
             )}
 
-            {/* CHOR POLICE DAKAT BABU REAL MULTIPLAYER ACTIVE MATCH */}
+            {/* REAL MULTIPLAYER ACTIVE MATCH */}
             {currentView === 'play-game' && activeRoom && user && (
               <div className="py-2">
-                <ChorPoliceGameView
-                  roomId={activeRoom.id}
-                  currentUserId={user.uid}
-                  currentUserName={user.tekkaName || user.displayName || 'Player'}
-                  onExit={handleLeaveRoom}
-                />
+                {activeRoom.gameId === 'chakranto' ? (
+                  <ChakrantoGameView
+                    room={activeRoom}
+                    currentUserId={user.uid}
+                    onExitGame={handleLeaveRoom}
+                  />
+                ) : (
+                  <ChorPoliceGameView
+                    roomId={activeRoom.id}
+                    currentUserId={user.uid}
+                    currentUserName={user.tekkaName || user.displayName || 'Player'}
+                    onExit={handleLeaveRoom}
+                  />
+                )}
               </div>
             )}
 

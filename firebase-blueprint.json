@@ -140,6 +140,41 @@
         "metrics": { "type": "object", "description": "Aggregated metrics map" }
       },
       "required": ["id", "updatedAt", "metrics"]
+    },
+    "gameMatches": {
+      "title": "Authoritative Game Match",
+      "description": "Completed and active multiplayer game match telemetry and standings",
+      "type": "object",
+      "properties": {
+        "roomId": { "type": "string", "description": "Room ID identifier matching document ID" },
+        "gameId": { "type": "string", "description": "Game ID (e.g. chor-police-dakat-babu or chakranto)" },
+        "gameName": { "type": "string", "description": "Display name of the game" },
+        "status": { "type": "string", "enum": ["PLAYING", "FINISHED", "ABANDONED"] },
+        "playerIds": { "type": "array", "description": "List of participant UIDs" },
+        "playerNames": { "type": "array", "description": "List of participant handles" },
+        "startedAt": { "type": "string", "description": "ISO timestamp when match started" },
+        "completedAt": { "type": "string", "description": "ISO timestamp when match concluded" },
+        "durationSeconds": { "type": "number", "description": "Total match duration in seconds" },
+        "winnerIds": { "type": "array", "description": "UIDs of winning player(s)" },
+        "winnerNames": { "type": "array", "description": "Handles of winning player(s)" },
+        "totalRounds": { "type": "number", "description": "Configured round count if applicable" },
+        "roundsPlayed": { "type": "number", "description": "Actual rounds completed" }
+      },
+      "required": ["roomId", "gameId", "status", "playerIds", "startedAt"]
+    },
+    "uniqueVisitors": {
+      "title": "Daily Unique Visitor Entry",
+      "description": "Deduplicated daily visitor records for attendance telemetry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Composite key {visitorId}_{dateStr}" },
+        "visitorId": { "type": "string", "description": "Unique device visitor ID" },
+        "date": { "type": "string", "description": "YYYY-MM-DD date in Asia/Kolkata timezone" },
+        "firstSeen": { "type": "number", "description": "Epoch timestamp of first daily appearance" },
+        "lastSeen": { "type": "number", "description": "Epoch timestamp of last daily activity" },
+        "isAnonymous": { "type": "boolean", "description": "Whether visitor was unauthenticated" }
+      },
+      "required": ["id", "visitorId", "date", "firstSeen"]
     }
   },
   "firestore": {
@@ -159,6 +194,30 @@
       "schema": "rooms",
       "description": "Multiplayer match rooms"
     },
+    "/rooms/{roomId}/publicSession/{docId}": {
+      "schema": "rooms",
+      "description": "Chor Police public game session state"
+    },
+    "/rooms/{roomId}/playerViews/{userId}": {
+      "schema": "rooms",
+      "description": "Chor Police private player hand view"
+    },
+    "/rooms/{roomId}/authoritative/{docId}": {
+      "schema": "rooms",
+      "description": "Chor Police authoritative secret state"
+    },
+    "/rooms/{roomId}/chakrantoPublic/{docId}": {
+      "schema": "rooms",
+      "description": "Chakranto public game session state"
+    },
+    "/rooms/{roomId}/chakrantoViews/{userId}": {
+      "schema": "rooms",
+      "description": "Chakranto private player hand view"
+    },
+    "/rooms/{roomId}/chakrantoAuthoritative/{docId}": {
+      "schema": "rooms",
+      "description": "Chakranto authoritative secret state"
+    },
     "/admins/{adminId}": {
       "schema": "admins",
       "description": "Authorized admin users registry"
@@ -166,6 +225,14 @@
     "/presence/{sessionId}": {
       "schema": "presence",
       "description": "Live visitor and user heartbeat presence"
+    },
+    "/uniqueVisitors/{visitorDocId}": {
+      "schema": "uniqueVisitors",
+      "description": "Daily unique visitor attendance tracking"
+    },
+    "/gameMatches/{matchId}": {
+      "schema": "gameMatches",
+      "description": "Authoritative match outcomes and telemetry"
     },
     "/adminAuditLogs/{logId}": {
       "schema": "adminAuditLogs",

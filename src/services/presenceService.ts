@@ -21,27 +21,70 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { LivePresence, PresenceLocation } from '../types/admin';
+import { getKolkataDayBoundaries, getKolkataWeekBoundaries, getKolkataMonthBoundaries } from '../utils/dateUtils';
 
 // Configuration
 export const PRESENCE_HEARTBEAT_INTERVAL_MS = 25_000; // 25s
 export const PRESENCE_OFFLINE_THRESHOLD_MS = 90_000;  // 90s timeout
 export const PRESENCE_PURGE_THRESHOLD_MS = 5 * 60_000; // 5 min cleanup
 
-// Generate or retrieve persistent visitor session ID
-function getOrCreateSessionId(uid?: string): string {
-  if (uid) {
-    return `user_${uid}`;
-  }
-  
+/**
+ * Retrieves or generates a persistent device/browser visitor ID.
+ */
+export function getOrCreateDeviceVisitorId(): string {
   try {
-    const existing = sessionStorage.getItem('tekka_visitor_session_id');
+    const existing = localStorage.getItem('tekka_device_visitor_id');
     if (existing) return existing;
-    
-    const newId = `anon_${Math.random().toString(36).substring(2, 11)}_${Date.now().toString(36)}`;
-    sessionStorage.setItem('tekka_visitor_session_id', newId);
+    const newId = `vis_${Math.random().toString(36).substring(2, 12)}_${Date.now().toString(36)}`;
+    localStorage.setItem('tekka_device_visitor_id', newId);
     return newId;
   } catch {
-    return `anon_${Math.random().toString(36).substring(2, 11)}_${Date.now().toString(36)}`;
+    return `vis_${Math.random().toString(36).substring(2, 12)}_${Date.now().toString(36)}`;
+  }
+}
+
+/**
+ * Retrieves or generates a per-tab session ID.
+ */
+function getOrCreateTabId(): string {
+  try {
+    const existing = sessionStorage.getItem('tekka_tab_session_id');
+    if (existing) return existing;
+    const newId = `tab_${Math.random().toString(36).substring(2, 8)}`;
+    sessionStorage.setItem('tekka_tab_session_id', newId);
+    return newId;
+  } catch {
+    return `tab_${Math.random().toString(36).substring(2, 8)}`;
+  }
+}
+
+// Track if daily visitor has been recorded today for this device
+let lastRecordedDailyDate: string | null = null;
+
+async function recordDailyUniqueVisitor(visitorId: string, uid?: string, tekkaName?: string) {
+  const { dateStr } = getKolkataDayBoundaries();
+  if (lastRecordedDailyDate === dateStr) return; // Already recorded in this session
+
+  try {
+    const docId = `${visitorId}_${dateStr}`;
+    const visitorDocRef = doc(db, 'uniqueVisitors', docId);
+    const now = Date.now();
+    await setDoc(
+      visitorDocRef,
+      {
+        visitorId,
+        uid: uid || null,
+        tekkaName: tekkaName || null,
+        isAnonymous: !uid,
+        dateStr,
+        lastSeen: now,
+        createdAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+    lastRecordedDailyDate = dateStr;
+  } catch {
+    // Non-blocking visitor record error
   }
 }
 
@@ -64,15 +107,21 @@ export function startPresenceHeartbeat(params: {
     activeHeartbeatTimer = null;
   }
 
-  const sessionId = getOrCreateSessionId(params.uid);
+  const visitorId = getOrCreateDeviceVisitorId();
+  const tabId = getOrCreateTabId();
+  const sessionId = params.uid ? `sess_u_${params.uid}_${tabId}` : `sess_a_${visitorId}_${tabId}`;
   currentSessionDocId = sessionId;
   const isAnonymous = !params.uid;
+
+  // Authoritatively record unique daily visit
+  recordDailyUniqueVisitor(visitorId, params.uid, params.tekkaName);
 
   const sendHeartbeat = async () => {
     try {
       const presenceRef = doc(db, 'presence', sessionId);
       const payload: LivePresence = {
         sessionId,
+        visitorId,
         uid: params.uid || undefined,
         tekkaName: params.tekkaName || undefined,
         isAnonymous,
@@ -99,7 +148,6 @@ export function startPresenceHeartbeat(params: {
     if (currentSessionDocId) {
       try {
         const presenceRef = doc(db, 'presence', currentSessionDocId);
-        // Note: deleteDoc on unload is best-effort
         deleteDoc(presenceRef).catch(() => {});
       } catch {}
     }
@@ -124,10 +172,12 @@ export function startPresenceHeartbeat(params: {
 /**
  * Subscribes an authorized admin to live presence records.
  * Filters out records older than PRESENCE_OFFLINE_THRESHOLD_MS.
+ * Distinguishes Online Sessions (open tabs) from Unique Online Users.
  */
 export function subscribeToLivePresence(
   callback: (presences: LivePresence[], breakdown: {
-    totalVisitors: number;
+    totalSessions: number;
+    uniqueOnlineUsers: number;
     anonymousVisitors: number;
     authenticatedUsers: number;
     usersInRooms: number;
@@ -144,8 +194,9 @@ export function subscribeToLivePresence(
       const now = Date.now();
       const activeList: LivePresence[] = [];
 
-      let anonymousCount = 0;
-      let authenticatedCount = 0;
+      const uniqueAuthUids = new Set<string>();
+      const uniqueAnonVisitors = new Set<string>();
+
       let inRoomsCount = 0;
       let onGameHubCount = 0;
       let inGameCount = 0;
@@ -158,9 +209,9 @@ export function subscribeToLivePresence(
           activeList.push(data);
 
           if (data.isAnonymous) {
-            anonymousCount++;
-          } else {
-            authenticatedCount++;
+            uniqueAnonVisitors.add(data.visitorId || data.sessionId);
+          } else if (data.uid) {
+            uniqueAuthUids.add(data.uid);
           }
 
           if (data.location === 'in-game') inGameCount++;
@@ -174,10 +225,13 @@ export function subscribeToLivePresence(
         }
       });
 
+      const uniqueOnlineCount = uniqueAuthUids.size + uniqueAnonVisitors.size;
+
       callback(activeList, {
-        totalVisitors: activeList.length,
-        anonymousVisitors: anonymousCount,
-        authenticatedUsers: authenticatedCount,
+        totalSessions: activeList.length,
+        uniqueOnlineUsers: uniqueOnlineCount,
+        anonymousVisitors: uniqueAnonVisitors.size,
+        authenticatedUsers: uniqueAuthUids.size,
         usersInRooms: inRoomsCount,
         usersOnGameHub: onGameHubCount,
         usersInGame: inGameCount,
@@ -187,7 +241,8 @@ export function subscribeToLivePresence(
     (err) => {
       console.warn('Presence subscription restricted or failed:', err.message);
       callback([], {
-        totalVisitors: 0,
+        totalSessions: 0,
+        uniqueOnlineUsers: 0,
         anonymousVisitors: 0,
         authenticatedUsers: 0,
         usersInRooms: 0,

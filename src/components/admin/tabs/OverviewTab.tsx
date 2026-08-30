@@ -1,19 +1,17 @@
 import React from 'react';
 import {
   Users,
-  UserCheck,
   Radio,
-  Gamepad2,
   Trophy,
   Activity,
   Layers,
-  Calendar,
-  ArrowUpRight,
-  TrendingUp,
   Eye,
   RefreshCw,
+  Clock,
+  Laptop,
 } from 'lucide-react';
 import { AdminOverviewStats } from '../../../types/admin';
+import { formatKolkataDateTime } from '../../../utils/dateUtils';
 
 interface OverviewTabProps {
   stats: AdminOverviewStats | null;
@@ -39,16 +37,16 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ stats, isLoading, onRe
     {
       title: 'Total Registered Accounts',
       value: stats.totalUsers,
-      subtext: `+${stats.newUsersToday} today · +${stats.newUsersThisWeek} this week`,
+      subtext: `+${stats.newUsersToday} today (IST) · +${stats.newUsersThisWeek} this week`,
       icon: Users,
       color: 'text-blue-400',
       border: 'border-blue-500/20',
       bg: 'bg-blue-950/10',
     },
     {
-      title: 'Live Visitors on Site',
-      value: stats.currentVisitors,
-      subtext: `${stats.anonymousVisitors} anonymous · ${stats.authenticatedOnlineUsers} registered`,
+      title: 'Unique Visitors Online',
+      value: stats.uniqueOnlineUsers,
+      subtext: `${stats.onlineSessions} active sessions · ${stats.anonymousVisitors} anon · ${stats.authenticatedOnlineUsers} registered`,
       icon: Eye,
       color: 'text-emerald-400',
       border: 'border-emerald-500/20',
@@ -56,13 +54,13 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ stats, isLoading, onRe
       isLive: true,
     },
     {
-      title: 'Active Online Gamers',
-      value: stats.onlineUsers,
-      subtext: `${stats.usersInGame} in active match · ${stats.usersInRooms} in lobbies`,
-      icon: Radio,
-      color: 'text-[#E50914]',
-      border: 'border-[#E50914]/30',
-      bg: 'bg-[#E50914]/10',
+      title: 'Active Online Sessions',
+      value: stats.onlineSessions,
+      subtext: `${stats.usersInGame} in match · ${stats.usersInRooms} in room · ${stats.usersOnGameHub} browsing`,
+      icon: Laptop,
+      color: 'text-cyan-400',
+      border: 'border-cyan-500/20',
+      bg: 'bg-cyan-950/10',
       isLive: true,
     },
     {
@@ -77,20 +75,20 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ stats, isLoading, onRe
     {
       title: 'Matches Completed',
       value: stats.completedGames,
-      subtext: `${stats.gamesPlayedToday} played today · ${stats.gamesPlayedThisWeek} this week`,
+      subtext: `${stats.gamesPlayedToday} played today (IST) · ${stats.gamesPlayedThisWeek} this week`,
       icon: Trophy,
       color: 'text-purple-400',
       border: 'border-purple-500/20',
       bg: 'bg-purple-950/10',
     },
     {
-      title: 'Games Played This Month',
-      value: stats.gamesPlayedThisMonth,
-      subtext: '30-day continuous window',
+      title: 'Unique Daily Visitors (Today)',
+      value: stats.uniqueVisitorsToday,
+      subtext: `${stats.uniqueVisitorsThisWeek} this week · ${stats.uniqueVisitorsThisMonth} this month (IST)`,
       icon: Activity,
-      color: 'text-cyan-400',
-      border: 'border-cyan-500/20',
-      bg: 'bg-cyan-950/10',
+      color: 'text-rose-400',
+      border: 'border-rose-500/20',
+      bg: 'bg-rose-950/10',
     },
   ];
 
@@ -99,9 +97,15 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ stats, isLoading, onRe
       {/* Top Header Summary & Action */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#1E1E1E]">
         <div>
-          <h2 className="text-lg font-bold text-white tracking-tight">Platform Command Center</h2>
-          <p className="text-xs text-zinc-400 font-mono-code">
-            Real-time platform telemetry · Last updated: {new Date(stats.lastUpdated).toLocaleTimeString()}
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-bold text-white tracking-tight">Platform Command Center</h2>
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono-code bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              Asia/Kolkata (IST)
+            </span>
+          </div>
+          <p className="text-xs text-zinc-400 font-mono-code mt-0.5">
+            Authoritative Firestore Telemetry · Last updated: {formatKolkataDateTime(stats.lastUpdated)}
           </p>
         </div>
         <button
@@ -155,7 +159,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ stats, isLoading, onRe
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
               <Users className="w-4 h-4 text-blue-400" />
-              User Registration Velocity
+              User Registration Velocity (IST)
             </h3>
             <span className="text-xs font-mono-code text-zinc-500">Live DB Aggregation</span>
           </div>
@@ -163,7 +167,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ stats, isLoading, onRe
           <div className="space-y-3">
             <div>
               <div className="flex justify-between text-xs font-mono-code mb-1">
-                <span className="text-zinc-400">New Accounts Today</span>
+                <span className="text-zinc-400">New Accounts Today (since 00:00 IST)</span>
                 <span className="text-white font-bold">{stats.newUsersToday}</span>
               </div>
               <div className="w-full bg-[#181818] rounded-full h-2">
@@ -178,7 +182,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ stats, isLoading, onRe
 
             <div>
               <div className="flex justify-between text-xs font-mono-code mb-1">
-                <span className="text-zinc-400">New Accounts This Week (7d)</span>
+                <span className="text-zinc-400">New Accounts This Week (since Monday IST)</span>
                 <span className="text-white font-bold">{stats.newUsersThisWeek}</span>
               </div>
               <div className="w-full bg-[#181818] rounded-full h-2">
@@ -193,7 +197,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ stats, isLoading, onRe
 
             <div>
               <div className="flex justify-between text-xs font-mono-code mb-1">
-                <span className="text-zinc-400">New Accounts This Month (30d)</span>
+                <span className="text-zinc-400">New Accounts This Month (since 1st IST)</span>
                 <span className="text-white font-bold">{stats.newUsersThisMonth}</span>
               </div>
               <div className="w-full bg-[#181818] rounded-full h-2">

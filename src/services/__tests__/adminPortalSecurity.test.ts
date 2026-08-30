@@ -101,6 +101,7 @@ const mockCpData: ChorPoliceAnalyticsData = {
   totalMatches: 30,
   completedMatches: 27,
   abandonedMatches: 3,
+  currentlyRunning: 0,
   averageRoundsCompleted: 5.2,
   averageMatchDurationMinutes: 8.5,
   mostCommonWinner: { tekkaName: 'TacticalPro', wins: 12 },

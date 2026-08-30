@@ -16,12 +16,14 @@ interface GameAnalyticsTabProps {
   analytics: GameAnalyticsData[];
   isLoading: boolean;
   onSelectChorPolice: () => void;
+  onSelectChakranto?: () => void;
 }
 
 export const GameAnalyticsTab: React.FC<GameAnalyticsTabProps> = ({
   analytics,
   isLoading,
   onSelectChorPolice,
+  onSelectChakranto,
 }) => {
   return (
     <div className="space-y-6">
@@ -33,7 +35,7 @@ export const GameAnalyticsTab: React.FC<GameAnalyticsTabProps> = ({
             Platform Game Catalog Performance
           </h2>
           <p className="text-xs text-zinc-400 font-mono-code">
-            Overall engagement, completion rates, match throughput, and average session times
+            Authoritative match throughput, real completion rates, and average session times
           </p>
         </div>
       </div>
@@ -63,6 +65,16 @@ export const GameAnalyticsTab: React.FC<GameAnalyticsTabProps> = ({
                   Deep Analytics →
                 </button>
               )}
+
+              {game.gameId.includes('chakranto') && onSelectChakranto && (
+                <button
+                  type="button"
+                  onClick={onSelectChakranto}
+                  className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-mono-code font-bold transition-colors cursor-pointer"
+                >
+                  Deep Analytics →
+                </button>
+              )}
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -87,15 +99,15 @@ export const GameAnalyticsTab: React.FC<GameAnalyticsTabProps> = ({
             {/* Time windows */}
             <div className="p-3 rounded-lg bg-[#121212] border border-[#222] text-xs font-mono-code space-y-1.5">
               <div className="flex justify-between text-zinc-400">
-                <span>Matches Today:</span>
+                <span>Matches Today (IST):</span>
                 <span className="text-white font-bold">{game.playedToday}</span>
               </div>
               <div className="flex justify-between text-zinc-400">
-                <span>Matches This Week (7d):</span>
+                <span>Matches This Week (IST):</span>
                 <span className="text-white font-bold">{game.playedThisWeek}</span>
               </div>
               <div className="flex justify-between text-zinc-400">
-                <span>Matches This Month (30d):</span>
+                <span>Matches This Month (IST):</span>
                 <span className="text-white font-bold">{game.playedThisMonth}</span>
               </div>
             </div>

@@ -18,6 +18,7 @@ import {
   PublicGameSessionState,
 } from '../types/gameSession';
 import { TekkaRoom } from '../types/room';
+import { trackMatchStart, trackChorPoliceMatchFinish } from './analyticsTrackingService';
 
 /**
  * Starts a new authoritative game session for a 4-player room.
@@ -139,6 +140,16 @@ export async function startGameSession(roomId: string, hostUid: string): Promise
   await updateDoc(roomRef, {
     status: 'PLAYING',
     updatedAt: now,
+  });
+
+  // 6. Authoritative Analytics Tracking
+  trackMatchStart({
+    roomId,
+    roomCode: room.roomCode,
+    gameId: room.gameId,
+    gameName: room.gameName || 'Chor Police Dakat Babu',
+    players: room.players.map((p) => ({ id: p.id, tekkaName: p.tekkaName })),
+    totalRounds: room.totalRounds || 5,
   });
 }
 
@@ -336,6 +347,19 @@ export async function advanceToNextRoundAction(
       transaction.update(roomRef, {
         status: 'FINISHED',
         updatedAt: now,
+      });
+
+      // Authoritative analytics recording
+      trackChorPoliceMatchFinish({
+        roomId,
+        winners,
+        finalStandings: finalStandings.map((s) => ({
+          playerId: s.playerId,
+          tekkaName: s.playerName,
+          score: s.score,
+          rank: s.rank,
+        })),
+        totalRounds: publicState.totalRounds,
       });
       return;
     }

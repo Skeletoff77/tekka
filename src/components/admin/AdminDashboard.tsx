@@ -14,7 +14,7 @@ import {
   RefreshCw,
   Menu,
   X,
-  Sparkles,
+  Swords,
 } from 'lucide-react';
 import { User as FirebaseUser, signOut } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
@@ -23,6 +23,7 @@ import {
   AdminAuditLog,
   GameAnalyticsData,
   ChorPoliceAnalyticsData,
+  ChakrantoAnalyticsData,
   UserManagementProfile,
 } from '../../types/admin';
 import { TekkaRoom } from '../../types/room';
@@ -32,6 +33,7 @@ import {
   getAllRooms,
   getPlatformGameAnalytics,
   getChorPoliceAnalytics,
+  getChakrantoAnalytics,
   getAdminAuditLogs,
   updateUserAccountStatus,
   recordAuditLog,
@@ -43,6 +45,7 @@ import { LivePresenceTab } from './tabs/LivePresenceTab';
 import { RoomsTab } from './tabs/RoomsTab';
 import { GameAnalyticsTab } from './tabs/GameAnalyticsTab';
 import { ChorPoliceTab } from './tabs/ChorPoliceTab';
+import { ChakrantoTab } from './tabs/ChakrantoTab';
 import { AuditLogsTab } from './tabs/AuditLogsTab';
 import { SettingsTab } from './tabs/SettingsTab';
 
@@ -53,6 +56,7 @@ export type AdminTab =
   | 'rooms'
   | 'analytics'
   | 'chor-police'
+  | 'chakranto'
   | 'audit-logs'
   | 'settings';
 
@@ -76,6 +80,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [rooms, setRooms] = useState<TekkaRoom[]>([]);
   const [gameAnalytics, setGameAnalytics] = useState<GameAnalyticsData[]>([]);
   const [chorPoliceData, setChorPoliceData] = useState<ChorPoliceAnalyticsData | null>(null);
+  const [chakrantoData, setChakrantoData] = useState<ChakrantoAnalyticsData | null>(null);
   const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -84,12 +89,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const loadAllData = async () => {
     try {
       setIsLoading(true);
-      const [statsRes, usersRes, roomsRes, gamesRes, cpRes, logsRes] = await Promise.all([
+      const [statsRes, usersRes, roomsRes, gamesRes, cpRes, chRes, logsRes] = await Promise.all([
         getAdminOverviewStats(),
         getAllUsers(),
         getAllRooms(),
         getPlatformGameAnalytics(),
         getChorPoliceAnalytics(),
+        getChakrantoAnalytics(),
         getAdminAuditLogs(100),
       ]);
 
@@ -98,6 +104,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setRooms(roomsRes);
       setGameAnalytics(gamesRes);
       setChorPoliceData(cpRes);
+      setChakrantoData(chRes);
       setAuditLogs(logsRes);
     } catch (err) {
       console.error('Failed to load admin telemetry:', err);
@@ -152,71 +159,57 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     { id: 'rooms' as AdminTab, label: 'Room Monitor', icon: Layers, badge: rooms.filter((r) => r.status === 'PLAYING').length },
     { id: 'analytics' as AdminTab, label: 'Game Catalog', icon: BarChart2 },
     { id: 'chor-police' as AdminTab, label: 'Chor Police Deep', icon: Trophy },
+    { id: 'chakranto' as AdminTab, label: 'Chakranto Deep', icon: Swords },
     { id: 'audit-logs' as AdminTab, label: 'Audit Trail', icon: Lock },
     { id: 'settings' as AdminTab, label: 'Security & Settings', icon: Settings },
   ];
 
   return (
     <div className="min-h-screen bg-[#050505] text-white flex flex-col md:flex-row selection:bg-[#E50914] selection:text-white font-sans">
-      {/* Mobile Top Bar */}
-      <div className="md:hidden flex items-center justify-between p-4 bg-[#0A0A0A] border-b border-[#1E1E1E] sticky top-0 z-40">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-[#141414] border border-[#2A2A2A] flex items-center justify-center text-[#E50914]">
-            <Shield className="w-4 h-4" />
+      {/* Mobile Top Header */}
+      <div className="md:hidden flex items-center justify-between p-4 bg-[#0A0A0A] border-b border-[#1E1E1E]">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-[#E50914] flex items-center justify-center font-black text-white text-base tracking-wider">
+            T
           </div>
           <div>
-            <span className="text-sm font-bold tracking-tight">TEKKA</span>
-            <span className="text-[10px] font-mono-code text-[#E50914] ml-1.5 px-1 py-0.2 rounded border border-[#E50914]/40">
-              ADMIN
-            </span>
+            <span className="font-extrabold text-sm tracking-tight text-white block">TEKKA</span>
+            <span className="text-[10px] font-mono-code text-zinc-400 block -mt-0.5">ADMIN PORTAL</span>
           </div>
         </div>
-
         <button
           type="button"
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="p-2 rounded-lg bg-[#141414] text-zinc-300 border border-[#222]"
+          className="p-2 rounded-lg bg-[#141414] text-zinc-300 hover:text-white"
         >
           {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
       </div>
 
-      {/* Sidebar */}
+      {/* Sidebar Navigation */}
       <aside
-        className={`fixed md:sticky top-0 left-0 h-screen w-64 bg-[#0A0A0A] border-r border-[#1E1E1E] flex flex-col z-50 transition-transform md:translate-x-0 ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className={`${
+          sidebarOpen ? 'block' : 'hidden'
+        } md:flex flex-col w-full md:w-64 bg-[#0A0A0A] border-r border-[#181818] shrink-0 z-30 md:min-h-screen`}
       >
         {/* Brand Header */}
-        <div className="p-5 border-b border-[#181818] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#141414] border border-[#2A2A2A] flex items-center justify-center text-[#E50914] shadow-inner">
-              <Shield className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-sm tracking-wider text-white">TEKKA</span>
-                <span className="text-[9px] font-mono-code text-[#E50914] bg-[#E50914]/10 border border-[#E50914]/30 px-1 py-0.2 rounded">
-                  PORTAL
-                </span>
-              </div>
-              <span className="text-[10px] font-mono-code text-zinc-500 block mt-0.5">
-                Security Kernel v2.4
+        <div className="p-5 border-b border-[#181818] hidden md:flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#E50914] to-[#990000] flex items-center justify-center font-black text-white text-lg shadow-lg shadow-red-950/50">
+            T
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-extrabold text-base tracking-tight text-white">TEKKA</span>
+              <span className="px-1.5 py-0.5 text-[9px] font-mono-code font-bold rounded bg-[#E50914]/20 border border-[#E50914]/40 text-[#FF4D4D]">
+                PORTAL
               </span>
             </div>
+            <span className="text-[11px] font-mono-code text-zinc-500 block">Authoritative Admin</span>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(false)}
-            className="md:hidden p-1 text-zinc-400 hover:text-white"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
-        {/* Navigation List */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        {/* Navigation Items */}
+        <nav className="p-3 space-y-1 flex-1 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -228,14 +221,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   setActiveTab(item.id);
                   setSidebarOpen(false);
                 }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-mono-code transition-colors cursor-pointer ${
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-[#E50914] text-white font-semibold shadow-md'
+                    ? 'bg-[#E50914] text-white font-bold shadow-md shadow-red-950/50'
                     : 'text-zinc-400 hover:text-white hover:bg-[#141414]'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-zinc-400'}`} />
+                <div className="flex items-center gap-2.5">
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-zinc-400'}`} />
                   <span>{item.label}</span>
                 </div>
 
@@ -246,10 +239,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </span>
                 )}
 
-                {item.badge !== undefined && item.badge > 0 && !item.isLive && (
+                {item.badge !== undefined && item.badge > 0 && (
                   <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded ${
-                      isActive ? 'bg-black/40 text-white' : 'bg-[#181818] text-zinc-400 border border-[#2A2A2A]'
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono-code ${
+                      isActive ? 'bg-black/30 text-white' : 'bg-[#181818] text-zinc-400'
                     }`}
                   >
                     {item.badge}
@@ -324,11 +317,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             analytics={gameAnalytics}
             isLoading={isLoading}
             onSelectChorPolice={() => setActiveTab('chor-police')}
+            onSelectChakranto={() => setActiveTab('chakranto')}
           />
         )}
 
         {activeTab === 'chor-police' && (
           <ChorPoliceTab data={chorPoliceData} isLoading={isLoading} />
+        )}
+
+        {activeTab === 'chakranto' && (
+          <ChakrantoTab data={chakrantoData} isLoading={isLoading} />
         )}
 
         {activeTab === 'audit-logs' && (

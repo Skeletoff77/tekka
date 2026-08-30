@@ -3,7 +3,8 @@ import { Users, Clock, Bookmark, ChevronRight, Sparkles } from 'lucide-react';
 import { Game } from '../../types/game';
 import { Badge } from '../common/Badge';
 import { useAuth } from '../../context/AuthContext';
-import { BannerIllustration } from '../../games/chorPoliceDakatBabu/assets/BannerIllustration';
+import { BannerIllustration as ChorPoliceBannerIllustration } from '../../games/chorPoliceDakatBabu/assets/BannerIllustration';
+import { AlertTriangle } from 'lucide-react';
 
 interface GameCardProps {
   game: Game;
@@ -124,8 +125,18 @@ export const GameCard: React.FC<GameCardProps> = ({ game, onSelect, viewMode = '
             onError={() => setImageError(true)}
             className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
           />
+        ) : game.id === 'chakranto' ? (
+          <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-[#1A0A0A] border border-red-900/60 text-center">
+            <AlertTriangle className="w-6 h-6 text-red-500 mb-1" />
+            <span className="text-[10px] font-mono-code font-bold text-red-400 uppercase">
+              CHAKRANTO ASSET LOAD ERROR
+            </span>
+            <span className="text-[8px] font-mono-code text-zinc-500 mt-0.5 break-all">
+              {game.thumbnail}
+            </span>
+          </div>
         ) : game.id === 'chor-police-dakat-babu' ? (
-          <BannerIllustration className="w-full h-full object-cover" />
+          <ChorPoliceBannerIllustration className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-[#141414] text-zinc-600 font-mono-code text-xs">
             TEKKA SYSTEM

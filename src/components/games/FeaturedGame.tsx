@@ -4,7 +4,8 @@ import { Game } from '../../types/game';
 import { Button } from '../common/Button';
 import { Badge } from '../common/Badge';
 import { useAuth } from '../../context/AuthContext';
-import { BannerIllustration } from '../../games/chorPoliceDakatBabu/assets/BannerIllustration';
+import { BannerIllustration as ChorPoliceBannerIllustration } from '../../games/chorPoliceDakatBabu/assets/BannerIllustration';
+import { AlertTriangle } from 'lucide-react';
 
 interface FeaturedGameProps {
   game: Game;
@@ -116,8 +117,27 @@ export const FeaturedGame: React.FC<FeaturedGameProps> = ({ game, onSelect }) =>
               onError={() => setImageError(true)}
               className="w-full h-full object-cover object-center scale-105 transition-transform duration-1000 hover:scale-100"
             />
+          ) : game.id === 'chakranto' ? (
+            <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-[#1A0A0A] border border-red-900/60 text-center">
+              <AlertTriangle className="w-8 h-8 text-red-500 mb-2" />
+              <span className="text-xs font-mono-code font-bold text-red-400 uppercase">
+                CHAKRANTO ASSET LOAD ERROR
+              </span>
+              <span className="text-[10px] font-mono-code text-zinc-500 mt-1 break-all">
+                {game.banner}
+              </span>
+            </div>
+          ) : game.id === 'chor-police-dakat-babu' ? (
+            <ChorPoliceBannerIllustration className="w-full h-full object-cover" />
           ) : (
-            <BannerIllustration className="w-full h-full object-cover" />
+            <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#181818] to-[#0A0A0A] p-6 text-center">
+              <span className="text-xs font-mono-code uppercase tracking-widest text-[#FF4D4D] font-bold">
+                TEKKA ORIGINAL
+              </span>
+              <span className="text-xl font-display font-bold text-white mt-1">
+                {game.name}
+              </span>
+            </div>
           )}
 
           {/* Cinematic Overlays strictly Black & Red */}

@@ -129,39 +129,45 @@ export const RoomJoinModal: React.FC<RoomJoinModalProps> = ({
         {/* Tab Content: CREATE ROOM */}
         {activeTab === 'create' && (
           <div className="space-y-5">
-            <div className="space-y-3">
-              <label className="text-xs font-mono-code uppercase tracking-wider text-zinc-300 font-bold flex items-center gap-2">
-                <Clock className="w-3.5 h-3.5 text-[#E50914]" />
-                SELECT MATCH LENGTH
-              </label>
+            {game.id === 'chor-police-dakat-babu' && (
+              <div className="space-y-3">
+                <label className="text-xs font-mono-code uppercase tracking-wider text-zinc-300 font-bold flex items-center gap-2">
+                  <Clock className="w-3.5 h-3.5 text-[#E50914]" />
+                  SELECT MATCH LENGTH
+                </label>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                {VALID_ROUND_COUNTS.map((rounds) => {
-                  const isSelected = selectedRounds === rounds;
-                  return (
-                    <button
-                      key={rounds}
-                      type="button"
-                      onClick={() => setSelectedRounds(rounds)}
-                      className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-gradient-to-b from-red-950/60 to-[#141414] border-[#E50914] text-white shadow-[0_0_12px_rgba(229,9,20,0.3)]'
-                          : 'bg-[#141414] border-[#262626] text-zinc-400 hover:border-zinc-500'
-                      }`}
-                    >
-                      <span className="text-xl font-mono-code font-black">{rounds}</span>
-                      <span className="text-[9px] font-mono-code uppercase tracking-wider mt-0.5">
-                        ROUNDS
-                      </span>
-                    </button>
-                  );
-                })}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {VALID_ROUND_COUNTS.map((rounds) => {
+                    const isSelected = selectedRounds === rounds;
+                    return (
+                      <button
+                        key={rounds}
+                        type="button"
+                        onClick={() => setSelectedRounds(rounds)}
+                        className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-gradient-to-b from-red-950/60 to-[#141414] border-[#E50914] text-white shadow-[0_0_12px_rgba(229,9,20,0.3)]'
+                            : 'bg-[#141414] border-[#262626] text-zinc-400 hover:border-zinc-500'
+                        }`}
+                      >
+                        <span className="text-xl font-mono-code font-black">{rounds}</span>
+                        <span className="text-[9px] font-mono-code uppercase tracking-wider mt-0.5">
+                          ROUNDS
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="p-3.5 rounded-2xl bg-[#141414] border border-[#222222] text-xs font-mono-code text-zinc-400 flex items-center gap-2">
               <Users className="w-4 h-4 text-[#E50914] shrink-0" />
-              <span>You will host a room for exactly 4 authenticated players.</span>
+              <span>
+                {game.id === 'chakranto'
+                  ? 'You will host a room for 3 to 6 authenticated players.'
+                  : 'You will host a room for exactly 4 authenticated players.'}
+              </span>
             </div>
 
             <button

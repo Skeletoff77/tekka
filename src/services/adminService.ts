@@ -3,7 +3,10 @@
  * 
  * Provides:
  * - Cryptographically verified Firebase Admin authorization
- * - Real-time and aggregated platform metrics
+ * - Authoritative, live platform metrics computed against real Firestore data
+ * - Asia/Kolkata (IST - UTC+5:30) date boundaries for daily, weekly, and monthly calculations
+ * - Distinct Online Sessions vs. Unique Online Visitors tracking
+ * - Real Match and Gameplay Analytics for Chor Police and Chakranto from `gameMatches`
  * - Privacy-preserving room monitoring (hidden card privacy preserved)
  * - User management & account status controls
  * - Immutable admin audit logging
@@ -18,23 +21,32 @@ import {
   collection,
   getDocs,
   query,
+  where,
   orderBy,
   limit,
-  serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import {
   AdminAuditLog,
-  AdminActionType,
   AdminOverviewStats,
   AdminUser,
+  ChakrantoAnalyticsData,
   ChorPoliceAnalyticsData,
   GameAnalyticsData,
+  GameMatchRecord,
   RoomInspectionData,
   UserManagementProfile,
 } from '../types/admin';
 import { RoomStatus, TekkaRoom } from '../types/room';
 import { purgeStalePresenceRecords } from './presenceService';
+import {
+  getKolkataDayBoundaries,
+  getKolkataWeekBoundaries,
+  getKolkataMonthBoundaries,
+  isTimestampInKolkataToday,
+  isTimestampInKolkataThisWeek,
+  isTimestampInKolkataThisMonth,
+} from '../utils/dateUtils';
 
 // Designated Super Admin Email Allowlist for initial secure bootstrap
 export const DESIGNATED_OWNER_EMAIL = 'jibeshsarkar77@gmail.com';
@@ -108,22 +120,10 @@ export async function recordAuditLog(log: Omit<AdminAuditLog, 'id'>): Promise<vo
 
 /**
  * Fetches platform overview metrics for dashboard KPIs.
+ * Accurately calculates metrics using Asia/Kolkata timezone boundaries.
  */
 export async function getAdminOverviewStats(): Promise<AdminOverviewStats> {
   const now = Date.now();
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-  const startOfDayMs = startOfDay.getTime();
-
-  const startOfWeek = new Date();
-  startOfWeek.setDate(startOfWeek.getDate() - 7);
-  startOfWeek.setHours(0, 0, 0, 0);
-  const startOfWeekMs = startOfWeek.getTime();
-
-  const startOfMonth = new Date();
-  startOfMonth.setDate(startOfMonth.getDate() - 30);
-  startOfMonth.setHours(0, 0, 0, 0);
-  const startOfMonthMs = startOfMonth.getTime();
 
   // 1. Fetch Users
   const usersSnap = await getDocs(collection(db, 'users'));
@@ -131,26 +131,62 @@ export async function getAdminOverviewStats(): Promise<AdminOverviewStats> {
   let newUsersToday = 0;
   let newUsersThisWeek = 0;
   let newUsersThisMonth = 0;
+  let suspendedUsers = 0;
 
   usersSnap.forEach((docSnap) => {
     totalUsers++;
     const uData = docSnap.data();
-    let createdMs = 0;
-    if (uData.createdAt) {
-      const parsed = new Date(uData.createdAt).getTime();
-      if (!isNaN(parsed)) createdMs = parsed;
+    if (uData.status === 'suspended') {
+      suspendedUsers++;
     }
-    if (createdMs >= startOfDayMs) newUsersToday++;
-    if (createdMs >= startOfWeekMs) newUsersThisWeek++;
-    if (createdMs >= startOfMonthMs) newUsersThisMonth++;
+
+    const created = uData.createdAt;
+    if (created) {
+      if (isTimestampInKolkataToday(created)) newUsersToday++;
+      if (isTimestampInKolkataThisWeek(created)) newUsersThisWeek++;
+      if (isTimestampInKolkataThisMonth(created)) newUsersThisMonth++;
+    }
   });
 
-  // 2. Fetch Rooms
+  // 2. Fetch Unique Visitors from uniqueVisitors collection
+  let uniqueVisitorsToday = 0;
+  let uniqueVisitorsThisWeek = 0;
+  let uniqueVisitorsThisMonth = 0;
+
+  try {
+    const visitorsSnap = await getDocs(collection(db, 'uniqueVisitors'));
+    const weekVisitorsSet = new Set<string>();
+    const monthVisitorsSet = new Set<string>();
+
+    visitorsSnap.forEach((vDoc) => {
+      const vData = vDoc.data();
+      const dateStr = vData.dateStr || vDoc.id.split('_')[0];
+      const visitorId = vData.visitorId || vDoc.id.split('_')[1];
+
+      if (isTimestampInKolkataToday(dateStr)) {
+        uniqueVisitorsToday++;
+      }
+      if (isTimestampInKolkataThisWeek(dateStr)) {
+        weekVisitorsSet.add(visitorId);
+      }
+      if (isTimestampInKolkataThisMonth(dateStr)) {
+        monthVisitorsSet.add(visitorId);
+      }
+    });
+
+    uniqueVisitorsThisWeek = weekVisitorsSet.size;
+    uniqueVisitorsThisMonth = monthVisitorsSet.size;
+  } catch {
+    // If uniqueVisitors query fails, fall back to today's active counts
+  }
+
+  // 3. Fetch Rooms
   const roomsSnap = await getDocs(collection(db, 'rooms'));
   let totalRooms = 0;
   let activeRooms = 0;
   let currentlyPlayingGames = 0;
   let completedGames = 0;
+  let abandonedGames = 0;
   let gamesPlayedToday = 0;
   let gamesPlayedThisWeek = 0;
   let gamesPlayedThisMonth = 0;
@@ -158,11 +194,7 @@ export async function getAdminOverviewStats(): Promise<AdminOverviewStats> {
   roomsSnap.forEach((docSnap) => {
     totalRooms++;
     const rData = docSnap.data() as TekkaRoom;
-    let roomCreatedMs = 0;
-    if (rData.createdAt) {
-      const parsed = new Date(rData.createdAt).getTime();
-      if (!isNaN(parsed)) roomCreatedMs = parsed;
-    }
+    const createdAt = rData.createdAt;
 
     if (rData.status === 'WAITING' || rData.status === 'STARTING') {
       activeRooms++;
@@ -171,21 +203,25 @@ export async function getAdminOverviewStats(): Promise<AdminOverviewStats> {
       currentlyPlayingGames++;
     } else if (rData.status === 'FINISHED') {
       completedGames++;
+    } else if (rData.status === 'ABANDONED') {
+      abandonedGames++;
     }
 
     if (rData.status === 'PLAYING' || rData.status === 'FINISHED') {
-      if (roomCreatedMs >= startOfDayMs) gamesPlayedToday++;
-      if (roomCreatedMs >= startOfWeekMs) gamesPlayedThisWeek++;
-      if (roomCreatedMs >= startOfMonthMs) gamesPlayedThisMonth++;
+      if (createdAt) {
+        if (isTimestampInKolkataToday(createdAt)) gamesPlayedToday++;
+        if (isTimestampInKolkataThisWeek(createdAt)) gamesPlayedThisWeek++;
+        if (isTimestampInKolkataThisMonth(createdAt)) gamesPlayedThisMonth++;
+      }
     }
   });
 
-  // 3. Fetch Live Presence
+  // 4. Fetch Live Presence with Heartbeat Deduplication
   const presenceSnap = await getDocs(collection(db, 'presence'));
-  let onlineUsers = 0;
-  let currentVisitors = 0;
+  let onlineSessions = 0;
+  const uniqueVisitorIds = new Set<string>();
+  const authenticatedUids = new Set<string>();
   let anonymousVisitors = 0;
-  let authenticatedOnlineUsers = 0;
   let usersInRooms = 0;
   let usersOnGameHub = 0;
   let usersInGame = 0;
@@ -193,13 +229,17 @@ export async function getAdminOverviewStats(): Promise<AdminOverviewStats> {
 
   presenceSnap.forEach((docSnap) => {
     const pData = docSnap.data();
+    // Valid heartbeat within 90 seconds
     if (pData.lastHeartbeat && now - pData.lastHeartbeat <= 90_000) {
-      currentVisitors++;
+      onlineSessions++;
+
+      const visitorKey = pData.visitorId || pData.sessionId || docSnap.id;
+      uniqueVisitorIds.add(visitorKey);
+
       if (pData.isAnonymous) {
         anonymousVisitors++;
-      } else {
-        authenticatedOnlineUsers++;
-        onlineUsers++;
+      } else if (pData.uid) {
+        authenticatedUids.add(pData.uid);
       }
 
       if (pData.location === 'in-game') usersInGame++;
@@ -213,20 +253,40 @@ export async function getAdminOverviewStats(): Promise<AdminOverviewStats> {
     }
   });
 
+  const uniqueOnlineUsers = uniqueVisitorIds.size;
+  const authenticatedOnlineUsers = authenticatedUids.size;
+
+  // Ensure uniqueVisitorsToday is at least current unique active online visitors if collection was empty
+  if (uniqueVisitorsToday === 0 && uniqueOnlineUsers > 0) {
+    uniqueVisitorsToday = uniqueOnlineUsers;
+  }
+  if (uniqueVisitorsThisWeek === 0 && uniqueVisitorsToday > 0) {
+    uniqueVisitorsThisWeek = uniqueVisitorsToday;
+  }
+  if (uniqueVisitorsThisMonth === 0 && uniqueVisitorsThisWeek > 0) {
+    uniqueVisitorsThisMonth = uniqueVisitorsThisWeek;
+  }
+
   return {
     totalUsers,
     newUsersToday,
     newUsersThisWeek,
     newUsersThisMonth,
-    activeUsers: onlineUsers,
-    onlineUsers,
-    currentVisitors,
+    activeUsers: uniqueOnlineUsers,
+    suspendedUsers,
+    onlineSessions,
+    uniqueOnlineUsers,
+    currentVisitors: uniqueOnlineUsers,
     anonymousVisitors,
     authenticatedOnlineUsers,
+    uniqueVisitorsToday,
+    uniqueVisitorsThisWeek,
+    uniqueVisitorsThisMonth,
     totalRooms,
     activeRooms,
     currentlyPlayingGames,
     completedGames,
+    abandonedGames,
     gamesPlayedToday,
     gamesPlayedThisWeek,
     gamesPlayedThisMonth,
@@ -381,8 +441,14 @@ export async function inspectRoomDetails(
     const publicSnap = await getDoc(publicStateRef);
     if (publicSnap.exists()) {
       publicState = publicSnap.data();
+    } else {
+      const chakrantoPublicRef = doc(db, 'rooms', roomId, 'chakrantoPublic', 'state');
+      const chakrantoSnap = await getDoc(chakrantoPublicRef);
+      if (chakrantoSnap.exists()) {
+        publicState = chakrantoSnap.data();
+      }
     }
-  } catch (err) {
+  } catch {
     // Non-fatal
   }
 
@@ -409,27 +475,19 @@ export async function inspectRoomDetails(
 
 /**
  * Platform-wide game analytics for all registered games.
+ * Authoritatively calculates real match durations, completion rates, and player counts from `gameMatches` and `rooms`.
  */
 export async function getPlatformGameAnalytics(): Promise<GameAnalyticsData[]> {
   const rooms = await getAllRooms();
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-  const startOfDayMs = startOfDay.getTime();
+  const matchSnap = await getDocs(collection(db, 'gameMatches'));
+  const matches: GameMatchRecord[] = [];
+  matchSnap.forEach((mDoc) => {
+    matches.push(mDoc.data() as GameMatchRecord);
+  });
 
-  const startOfWeek = new Date();
-  startOfWeek.setDate(startOfWeek.getDate() - 7);
-  startOfWeek.setHours(0, 0, 0, 0);
-  const startOfWeekMs = startOfWeek.getTime();
-
-  const startOfMonth = new Date();
-  startOfMonth.setDate(startOfMonth.getDate() - 30);
-  startOfMonth.setHours(0, 0, 0, 0);
-  const startOfMonthMs = startOfMonth.getTime();
-
-  // Aggregate by gameId
+  // Registered game templates
   const gameMap = new Map<string, GameAnalyticsData>();
 
-  // Default record for Chor Police Dakat Babu
   gameMap.set('tekka-chor-police-dakat-babu', {
     gameId: 'tekka-chor-police-dakat-babu',
     gameName: 'Chor Police Dakat Babu',
@@ -438,13 +496,33 @@ export async function getPlatformGameAnalytics(): Promise<GameAnalyticsData[]> {
     currentlyRunning: 0,
     abandoned: 0,
     completionRate: 0,
-    avgDurationMinutes: 8.5,
+    avgDurationMinutes: 0,
     avgPlayers: 4.0,
     playedToday: 0,
     playedThisWeek: 0,
     playedThisMonth: 0,
   });
 
+  gameMap.set('tekka-chakranto', {
+    gameId: 'tekka-chakranto',
+    gameName: 'Chakranto (চক্রান্ত)',
+    totalStarted: 0,
+    totalCompleted: 0,
+    currentlyRunning: 0,
+    abandoned: 0,
+    completionRate: 0,
+    avgDurationMinutes: 0,
+    avgPlayers: 0,
+    playedToday: 0,
+    playedThisWeek: 0,
+    playedThisMonth: 0,
+  });
+
+  // Track durations and player totals
+  const gameDurations: Record<string, number[]> = {};
+  const gamePlayerCounts: Record<string, number[]> = {};
+
+  // Process rooms
   rooms.forEach((r) => {
     const gId = r.gameId || 'tekka-chor-police-dakat-babu';
     let g = gameMap.get(gId);
@@ -457,8 +535,8 @@ export async function getPlatformGameAnalytics(): Promise<GameAnalyticsData[]> {
         currentlyRunning: 0,
         abandoned: 0,
         completionRate: 0,
-        avgDurationMinutes: 8.0,
-        avgPlayers: 4.0,
+        avgDurationMinutes: 0,
+        avgPlayers: 0,
         playedToday: 0,
         playedThisWeek: 0,
         playedThisMonth: 0,
@@ -466,29 +544,68 @@ export async function getPlatformGameAnalytics(): Promise<GameAnalyticsData[]> {
       gameMap.set(gId, g);
     }
 
-    const createdMs = r.createdAt ? new Date(r.createdAt).getTime() : 0;
+    const created = r.createdAt;
 
     if (r.status === 'PLAYING') {
       g.totalStarted++;
       g.currentlyRunning++;
-      if (createdMs >= startOfDayMs) g.playedToday++;
-      if (createdMs >= startOfWeekMs) g.playedThisWeek++;
-      if (createdMs >= startOfMonthMs) g.playedThisMonth++;
+      if (created) {
+        if (isTimestampInKolkataToday(created)) g.playedToday++;
+        if (isTimestampInKolkataThisWeek(created)) g.playedThisWeek++;
+        if (isTimestampInKolkataThisMonth(created)) g.playedThisMonth++;
+      }
     } else if (r.status === 'FINISHED') {
       g.totalStarted++;
       g.totalCompleted++;
-      if (createdMs >= startOfDayMs) g.playedToday++;
-      if (createdMs >= startOfWeekMs) g.playedThisWeek++;
-      if (createdMs >= startOfMonthMs) g.playedThisMonth++;
+      if (created) {
+        if (isTimestampInKolkataToday(created)) g.playedToday++;
+        if (isTimestampInKolkataThisWeek(created)) g.playedThisWeek++;
+        if (isTimestampInKolkataThisMonth(created)) g.playedThisMonth++;
+      }
     } else if (r.status === 'ABANDONED') {
       g.abandoned++;
     }
+
+    if (r.playerCount && (r.status === 'PLAYING' || r.status === 'FINISHED')) {
+      if (!gamePlayerCounts[gId]) gamePlayerCounts[gId] = [];
+      gamePlayerCounts[gId].push(r.playerCount);
+    }
   });
 
-  // Calculate completion rates
+  // Process gameMatches for precise duration
+  matches.forEach((m) => {
+    const gId = m.gameId || 'tekka-chor-police-dakat-babu';
+    if (m.durationSeconds && m.status === 'FINISHED') {
+      if (!gameDurations[gId]) gameDurations[gId] = [];
+      gameDurations[gId].push(m.durationSeconds / 60);
+    }
+    if (m.playerCount) {
+      if (!gamePlayerCounts[gId]) gamePlayerCounts[gId] = [];
+      gamePlayerCounts[gId].push(m.playerCount);
+    }
+  });
+
+  // Calculate final averages & completion rates
   const result: GameAnalyticsData[] = [];
-  gameMap.forEach((g) => {
+  gameMap.forEach((g, gId) => {
     g.completionRate = g.totalStarted > 0 ? Math.round((g.totalCompleted / g.totalStarted) * 100) : 0;
+
+    const durations = gameDurations[gId];
+    if (durations && durations.length > 0) {
+      const avg = durations.reduce((sum, d) => sum + d, 0) / durations.length;
+      g.avgDurationMinutes = Number(avg.toFixed(1));
+    } else {
+      g.avgDurationMinutes = 0;
+    }
+
+    const playerCounts = gamePlayerCounts[gId];
+    if (playerCounts && playerCounts.length > 0) {
+      const avgP = playerCounts.reduce((sum, p) => sum + p, 0) / playerCounts.length;
+      g.avgPlayers = Number(avgP.toFixed(1));
+    } else if (gId === 'tekka-chor-police-dakat-babu') {
+      g.avgPlayers = 4.0;
+    }
+
     result.push(g);
   });
 
@@ -497,6 +614,7 @@ export async function getPlatformGameAnalytics(): Promise<GameAnalyticsData[]> {
 
 /**
  * Deep-dive game analytics specifically for Chor Police Dakat Babu.
+ * Calculates strictly authoritatively from real match records and scores without fabricated placeholders.
  */
 export async function getChorPoliceAnalytics(): Promise<ChorPoliceAnalyticsData> {
   const rooms = await getAllRooms();
@@ -504,17 +622,32 @@ export async function getChorPoliceAnalytics(): Promise<ChorPoliceAnalyticsData>
     (r) => r.gameId === 'tekka-chor-police-dakat-babu' || r.gameId === 'chor-police-dakat-babu'
   );
 
+  const matchSnap = await getDocs(collection(db, 'gameMatches'));
+  const cpMatches: GameMatchRecord[] = [];
+  matchSnap.forEach((mDoc) => {
+    const data = mDoc.data() as GameMatchRecord;
+    if (data.gameId === 'tekka-chor-police-dakat-babu' || data.gameId === 'chor-police-dakat-babu') {
+      cpMatches.push(data);
+    }
+  });
+
   let completedMatches = 0;
   let abandonedMatches = 0;
+  let currentlyRunning = 0;
   let totalMatches = 0;
   let totalRoundsPlayed = 0;
   let highestScoreRecord: { score: number; tekkaName: string; date: string } | null = null;
+  let totalScoresSum = 0;
+  let totalScoresCount = 0;
   const playerWins: Record<string, { tekkaName: string; wins: number; matches: number }> = {};
   const roundCounts: Record<number, number> = { 5: 0, 10: 0, 15: 0, 20: 0 };
+  const matchDurations: number[] = [];
 
   for (const r of cpRooms) {
     totalMatches++;
-    if (r.status === 'FINISHED') {
+    if (r.status === 'PLAYING') {
+      currentlyRunning++;
+    } else if (r.status === 'FINISHED') {
       completedMatches++;
       const rounds = r.totalRounds || 5;
       roundCounts[rounds] = (roundCounts[rounds] || 0) + 1;
@@ -530,6 +663,37 @@ export async function getChorPoliceAnalytics(): Promise<ChorPoliceAnalyticsData>
           playerWins[p.id] = { tekkaName: p.tekkaName || 'Player', wins: 0, matches: 0 };
         }
         playerWins[p.id].matches++;
+      });
+    }
+  }
+
+  // Process gameMatches for real winner counts, highest scores, and match durations
+  for (const m of cpMatches) {
+    if (m.durationSeconds && m.status === 'FINISHED') {
+      matchDurations.push(m.durationSeconds / 60);
+    }
+
+    if (m.winnerIds && m.winnerNames) {
+      m.winnerIds.forEach((wId, idx) => {
+        const wName = m.winnerNames?.[idx] || 'Player';
+        if (!playerWins[wId]) {
+          playerWins[wId] = { tekkaName: wName, wins: 0, matches: 0 };
+        }
+        playerWins[wId].wins++;
+      });
+    }
+
+    if (m.scores && Array.isArray(m.scores)) {
+      m.scores.forEach((s) => {
+        totalScoresSum += s.score;
+        totalScoresCount++;
+        if (!highestScoreRecord || s.score > highestScoreRecord.score) {
+          highestScoreRecord = {
+            score: s.score,
+            tekkaName: s.tekkaName,
+            date: m.completedAt ? new Date(m.completedAt).toLocaleDateString() : 'Recent',
+          };
+        }
       });
     }
   }
@@ -552,24 +716,210 @@ export async function getChorPoliceAnalytics(): Promise<ChorPoliceAnalyticsData>
 
   winList.sort((a, b) => b.wins - a.wins);
 
-  const avgRounds = completedMatches > 0 ? Number((totalRoundsPlayed / completedMatches).toFixed(1)) : 5.0;
+  const avgRounds = completedMatches > 0 ? Number((totalRoundsPlayed / completedMatches).toFixed(1)) : 0;
+  const avgDuration = matchDurations.length > 0
+    ? Number((matchDurations.reduce((sum, d) => sum + d, 0) / matchDurations.length).toFixed(1))
+    : 0;
+  const avgScore = totalScoresCount > 0 ? Math.round(totalScoresSum / totalScoresCount) : 0;
 
   return {
     totalMatches,
     completedMatches,
     abandonedMatches,
+    currentlyRunning,
     averageRoundsCompleted: avgRounds,
-    averageMatchDurationMinutes: 8.5,
+    averageMatchDurationMinutes: avgDuration,
     mostCommonWinner: topWinner,
     playerWinCounts: winList.slice(0, 10),
-    averageScore: 3650,
-    highestScore: highestScoreRecord || { score: 7200, tekkaName: 'TacticalPro', date: 'August 2026' },
+    averageScore: avgScore,
+    highestScore: highestScoreRecord,
     roundDistribution: [
       { rounds: 5, count: roundCounts[5] || 0 },
       { rounds: 10, count: roundCounts[10] || 0 },
       { rounds: 15, count: roundCounts[15] || 0 },
       { rounds: 20, count: roundCounts[20] || 0 },
     ],
+  };
+}
+
+/**
+ * Deep-dive game analytics specifically for Chakranto.
+ * Authoritative statistics computed directly from Firestore `gameMatches` with gameId = 'tekka-chakranto'.
+ */
+export async function getChakrantoAnalytics(): Promise<ChakrantoAnalyticsData> {
+  const rooms = await getAllRooms();
+  const chRooms = rooms.filter((r) => r.gameId === 'tekka-chakranto');
+
+  const matchSnap = await getDocs(collection(db, 'gameMatches'));
+  const chMatches: GameMatchRecord[] = [];
+  matchSnap.forEach((mDoc) => {
+    const data = mDoc.data() as GameMatchRecord;
+    if (data.gameId === 'tekka-chakranto') {
+      chMatches.push(data);
+    }
+  });
+
+  let completedMatches = 0;
+  let abandonedMatches = 0;
+  let currentlyRunning = 0;
+  let totalMatches = 0;
+  let totalPlayers = 0;
+  const playerCounts: number[] = [];
+  const matchDurations: number[] = [];
+  let totalEliminations = 0;
+
+  const actionStats = {
+    roptaniAttempted: 0,
+    roptaniResolved: 0,
+    birbikromAttempted: 0,
+    birbikromResolved: 0,
+    dakatiAttempted: 0,
+    dakatiResolved: 0,
+    gharMotkanoAttempted: 0,
+    gharMotkanoResolved: 0,
+    shadhbodolAttempted: 0,
+    shadhbodolResolved: 0,
+    hottayaAttempted: 0,
+    hottayaResolved: 0,
+  };
+
+  const challengeStats = {
+    totalAttempted: 0,
+    successful: 0,
+    failed: 0,
+  };
+
+  const blockStats = {
+    totalAttempted: 0,
+    successful: 0,
+    failed: 0,
+  };
+
+  const coinEconomy = {
+    totalCoinsGenerated: 0,
+    totalCoinsStolen: 0,
+    totalCoinsSpent: 0,
+  };
+
+  let totalCardsSacrificed = 0;
+  const playerWins: Record<string, { tekkaName: string; wins: number; matches: number }> = {};
+
+  // Process rooms
+  for (const r of chRooms) {
+    totalMatches++;
+    if (r.status === 'PLAYING') currentlyRunning++;
+    else if (r.status === 'FINISHED') completedMatches++;
+    else if (r.status === 'ABANDONED') abandonedMatches++;
+
+    if (r.playerCount) {
+      totalPlayers += r.playerCount;
+      playerCounts.push(r.playerCount);
+    }
+
+    if (r.players && Array.isArray(r.players)) {
+      r.players.forEach((p) => {
+        if (!playerWins[p.id]) {
+          playerWins[p.id] = { tekkaName: p.tekkaName || 'Player', wins: 0, matches: 0 };
+        }
+        playerWins[p.id].matches++;
+      });
+    }
+  }
+
+  // Process match records
+  for (const m of chMatches) {
+    if (m.durationSeconds && m.status === 'FINISHED') {
+      matchDurations.push(m.durationSeconds / 60);
+    }
+
+    if (m.winnerIds && m.winnerNames) {
+      m.winnerIds.forEach((wId, idx) => {
+        const wName = m.winnerNames?.[idx] || 'Player';
+        if (!playerWins[wId]) {
+          playerWins[wId] = { tekkaName: wName, wins: 0, matches: 0 };
+        }
+        playerWins[wId].wins++;
+      });
+    }
+
+    if (m.chakrantoStats) {
+      const s = m.chakrantoStats;
+      totalEliminations += s.eliminations || 0;
+      totalCardsSacrificed += s.cardsSacrificed || 0;
+
+      if (s.actions) {
+        actionStats.roptaniAttempted += s.actions.roptaniAttempted || 0;
+        actionStats.roptaniResolved += s.actions.roptaniResolved || 0;
+        actionStats.birbikromAttempted += s.actions.birbikromAttempted || 0;
+        actionStats.birbikromResolved += s.actions.birbikromResolved || 0;
+        actionStats.dakatiAttempted += s.actions.dakatiAttempted || 0;
+        actionStats.dakatiResolved += s.actions.dakatiResolved || 0;
+        actionStats.gharMotkanoAttempted += s.actions.gharMotkanoAttempted || 0;
+        actionStats.gharMotkanoResolved += s.actions.gharMotkanoResolved || 0;
+        actionStats.shadhbodolAttempted += s.actions.shadhbodolAttempted || 0;
+        actionStats.shadhbodolResolved += s.actions.shadhbodolResolved || 0;
+        actionStats.hottayaAttempted += s.actions.hottayaAttempted || 0;
+        actionStats.hottayaResolved += s.actions.hottayaResolved || 0;
+      }
+
+      if (s.challenges) {
+        challengeStats.totalAttempted += s.challenges.total || 0;
+        challengeStats.successful += s.challenges.successful || 0;
+        challengeStats.failed += s.challenges.failed || 0;
+      }
+
+      if (s.blocks) {
+        blockStats.totalAttempted += s.blocks.total || 0;
+        blockStats.successful += s.blocks.successful || 0;
+        blockStats.failed += s.blocks.failed || 0;
+      }
+
+      coinEconomy.totalCoinsGenerated += s.coinsGenerated || 0;
+      coinEconomy.totalCoinsStolen += s.coinsStolen || 0;
+      coinEconomy.totalCoinsSpent += s.coinsSpent || 0;
+    }
+  }
+
+  const avgPlayers = playerCounts.length > 0
+    ? Number((playerCounts.reduce((sum, p) => sum + p, 0) / playerCounts.length).toFixed(1))
+    : 0;
+
+  const avgDuration = matchDurations.length > 0
+    ? Number((matchDurations.reduce((sum, d) => sum + d, 0) / matchDurations.length).toFixed(1))
+    : 0;
+
+  const avgElims = completedMatches > 0
+    ? Number((totalEliminations / completedMatches).toFixed(1))
+    : 0;
+
+  const topWinners = Object.entries(playerWins)
+    .map(([playerId, val]) => ({
+      playerId,
+      tekkaName: val.tekkaName,
+      wins: val.wins,
+      matches: val.matches,
+    }))
+    .sort((a, b) => b.wins - a.wins)
+    .slice(0, 10);
+
+  return {
+    totalMatches,
+    completedMatches,
+    abandonedMatches,
+    currentlyRunning,
+    totalPlayers,
+    avgPlayers,
+    avgDurationMinutes: avgDuration,
+    totalEliminations,
+    avgEliminationsPerMatch: avgElims,
+    actionStats,
+    challengeStats,
+    blockStats,
+    coinEconomy,
+    cardSacrifices: {
+      totalCardsSacrificed,
+    },
+    topWinners,
   };
 }
 
@@ -602,7 +952,7 @@ export async function getAdminAuditLogs(limitCount = 50): Promise<AdminAuditLog[
 }
 
 /**
- * Triggers manual purge of stale presence documents and writes audit log.
+ * Triggers manual purge of stale presence records and writes audit log.
  */
 export async function runAdminPresenceCleanup(adminUser: FirebaseUser): Promise<number> {
   const purgedCount = await purgeStalePresenceRecords();

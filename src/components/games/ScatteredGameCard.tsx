@@ -3,7 +3,8 @@ import { Users, Clock, Bookmark, ArrowRight, Sparkles, Eye, Shield } from 'lucid
 import { Game } from '../../types/game';
 import { Badge } from '../common/Badge';
 import { useAuth } from '../../context/AuthContext';
-import { BannerIllustration } from '../../games/chorPoliceDakatBabu/assets/BannerIllustration';
+import { BannerIllustration as ChorPoliceBannerIllustration } from '../../games/chorPoliceDakatBabu/assets/BannerIllustration';
+import { AlertTriangle } from 'lucide-react';
 
 export interface CardLayoutConfig {
   rotation: number;      // e.g. -5.5
@@ -129,8 +130,18 @@ export const ScatteredGameCard: React.FC<ScatteredGameCardProps> = ({
               isActive ? 'scale-105 filter brightness-105 contrast-[1.03]' : 'scale-100'
             }`}
           />
+        ) : game.id === 'chakranto' ? (
+          <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-[#1A0A0A] border border-red-900/60 text-center">
+            <AlertTriangle className="w-6 h-6 text-red-500 mb-1" />
+            <span className="text-[10px] font-mono-code font-bold text-red-400 uppercase">
+              CHAKRANTO ASSET LOAD ERROR
+            </span>
+            <span className="text-[8px] font-mono-code text-zinc-500 mt-0.5 break-all">
+              {game.banner || game.thumbnail}
+            </span>
+          </div>
         ) : game.id === 'chor-police-dakat-babu' ? (
-          <BannerIllustration className="w-full h-full object-cover" />
+          <ChorPoliceBannerIllustration className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#181818] to-[#0A0A0A] p-6 text-center">
             <span className="text-xs font-mono-code uppercase tracking-widest text-[#FF4D4D] font-bold">

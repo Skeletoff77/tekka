@@ -54,22 +54,40 @@ service cloud.firestore {
       // Allow host or admin to delete/abandon room
       allow delete: if isAuthenticated() && (resource.data.hostId == request.auth.uid || isAdmin());
 
-      // Public session state subcollection
+      // Public session state subcollection (Chor Police)
       match /publicSession/{docId} {
         allow read: if isAuthenticated();
         allow write: if isAuthenticated();
       }
 
-      // Private player views subcollection - STRICT PRIVACY ENFORCEMENT
+      // Private player views subcollection (Chor Police) - STRICT PRIVACY ENFORCEMENT
       // Each player can ONLY read their own private view document!
-      // Admin does NOT bypass this to protect secret cards during active games.
       match /playerViews/{userId} {
         allow read: if isAuthenticated() && request.auth.uid == userId;
         allow write: if isAuthenticated();
       }
 
-      // Authoritative secret state subcollection
+      // Authoritative secret state subcollection (Chor Police)
       match /authoritative/{docId} {
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated();
+      }
+
+      // Public session state subcollection (Chakranto)
+      match /chakrantoPublic/{docId} {
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated();
+      }
+
+      // Private player views subcollection (Chakranto) - STRICT PRIVACY ENFORCEMENT
+      // Each player can ONLY read their own private hand document!
+      match /chakrantoViews/{userId} {
+        allow read: if isAuthenticated() && request.auth.uid == userId;
+        allow write: if isAuthenticated();
+      }
+
+      // Authoritative secret state subcollection (Chakranto)
+      match /chakrantoAuthoritative/{docId} {
         allow read: if isAuthenticated();
         allow write: if isAuthenticated();
       }
@@ -89,6 +107,20 @@ service cloud.firestore {
       // Only authorized admins can query all presence records, protecting user privacy
       allow read: if isAdmin();
       // Admins or session creators can delete stale presence
+      allow delete: if isAdmin();
+    }
+
+    // Daily Unique Visitor Tracking
+    match /uniqueVisitors/{visitorDocId} {
+      // Any visitor can record their daily attendance
+      allow create, update: if true;
+      allow read, delete: if isAdmin();
+    }
+
+    // Authoritative Match Outcomes & Telemetry
+    match /gameMatches/{matchId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
       allow delete: if isAdmin();
     }
 

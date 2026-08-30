@@ -33,9 +33,12 @@ export const RoomLobbyView: React.FC<RoomLobbyViewProps> = ({
   const [copied, setCopied] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const minPlayers = room.minPlayers || 4;
+  const maxPlayers = room.maxPlayers || 4;
   const isHost = room.hostId === currentUserId;
-  const isFull = room.players.length === 4;
-  const neededPlayers = 4 - room.players.length;
+  const canStart = room.players.length >= minPlayers;
+  const isFull = room.players.length >= maxPlayers;
+  const neededPlayers = Math.max(0, minPlayers - room.players.length);
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(room.roomCode);
@@ -53,7 +56,7 @@ export const RoomLobbyView: React.FC<RoomLobbyViewProps> = ({
   };
 
   const handleStart = async () => {
-    if (!isHost || !isFull) return;
+    if (!isHost || !canStart) return;
     try {
       setErrorMsg(null);
       await onStartGame();
@@ -78,7 +81,9 @@ export const RoomLobbyView: React.FC<RoomLobbyViewProps> = ({
               {room.gameName}
             </h2>
             <p className="text-xs font-mono-code text-zinc-400">
-              Share the Room Code with 3 friends to start an official 4-player match.
+              {minPlayers === maxPlayers
+                ? `Share the Room Code with ${minPlayers - 1} friends to start an official ${minPlayers}-player match.`
+                : `Share the Room Code with friends (${minPlayers}–${maxPlayers} players). You can start anytime once at least ${minPlayers} players join.`}
             </p>
           </div>
 
@@ -117,65 +122,71 @@ export const RoomLobbyView: React.FC<RoomLobbyViewProps> = ({
         </div>
       )}
 
-      {/* Round Configuration (5, 10, 15, 20) */}
-      <div className="p-6 rounded-3xl bg-[#0E0E0E] border border-[#222222] space-y-4">
-        <div className="flex items-center justify-between">
-          <label className="text-xs font-mono-code uppercase tracking-wider text-zinc-300 font-bold flex items-center gap-2">
-            <Clock className="w-4 h-4 text-[#E50914]" />
-            MATCH LENGTH: {room.totalRounds || 5} ROUNDS
-          </label>
-          {!isHost && (
-            <span className="text-[10px] font-mono-code text-zinc-500">
-              (Configured by Host)
-            </span>
-          )}
-        </div>
+      {/* Round Configuration (Only for games that use match rounds like Chor Police) */}
+      {room.gameId === 'chor-police-dakat-babu' && (
+        <div className="p-6 rounded-3xl bg-[#0E0E0E] border border-[#222222] space-y-4">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-mono-code uppercase tracking-wider text-zinc-300 font-bold flex items-center gap-2">
+              <Clock className="w-4 h-4 text-[#E50914]" />
+              MATCH LENGTH: {room.totalRounds || 5} ROUNDS
+            </label>
+            {!isHost && (
+              <span className="text-[10px] font-mono-code text-zinc-500">
+                (Configured by Host)
+              </span>
+            )}
+          </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {VALID_ROUND_COUNTS.map((count) => {
-            const isSelected = (room.totalRounds || 5) === count;
-            return (
-              <button
-                key={count}
-                type="button"
-                disabled={!isHost}
-                onClick={() => handleRoundsChange(count)}
-                className={`p-3.5 rounded-2xl border-2 flex flex-col items-center justify-center transition-all duration-200 ${
-                  isSelected
-                    ? 'bg-gradient-to-b from-red-950/60 to-[#141414] border-[#E50914] text-white shadow-[0_0_15px_rgba(229,9,20,0.3)]'
-                    : 'bg-[#141414] border-[#262626] text-zinc-400'
-                } ${isHost ? 'cursor-pointer hover:border-zinc-500' : 'cursor-default opacity-80'}`}
-              >
-                <span className="text-2xl font-mono-code font-black">{count}</span>
-                <span className="text-[10px] font-mono-code uppercase tracking-wider mt-0.5">
-                  ROUNDS
-                </span>
-              </button>
-            );
-          })}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {VALID_ROUND_COUNTS.map((count) => {
+              const isSelected = (room.totalRounds || 5) === count;
+              return (
+                <button
+                  key={count}
+                  type="button"
+                  disabled={!isHost}
+                  onClick={() => handleRoundsChange(count)}
+                  className={`p-3.5 rounded-2xl border-2 flex flex-col items-center justify-center transition-all duration-200 ${
+                    isSelected
+                      ? 'bg-gradient-to-b from-red-950/60 to-[#141414] border-[#E50914] text-white shadow-[0_0_15px_rgba(229,9,20,0.3)]'
+                      : 'bg-[#141414] border-[#262626] text-zinc-400'
+                  } ${isHost ? 'cursor-pointer hover:border-zinc-500' : 'cursor-default opacity-80'}`}
+                >
+                  <span className="text-2xl font-mono-code font-black">{count}</span>
+                  <span className="text-[10px] font-mono-code uppercase tracking-wider mt-0.5">
+                    ROUNDS
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* 4 Table Seats Grid */}
+      {/* Table Seats Grid */}
       <div className="p-6 rounded-3xl bg-[#0E0E0E] border border-[#222222] space-y-4">
         <div className="flex items-center justify-between border-b border-[#1C1C1C] pb-3">
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-[#E50914]" />
             <h3 className="text-xs font-mono-code uppercase tracking-wider text-zinc-300 font-bold">
-              TABLE SEATS ({room.players.length} / 4 REAL PLAYERS)
+              TABLE SEATS ({room.players.length} / {maxPlayers} PLAYERS)
             </h3>
           </div>
           <span
             className={`text-xs font-mono-code font-bold ${
-              isFull ? 'text-emerald-400' : 'text-amber-400'
+              canStart ? 'text-emerald-400' : 'text-amber-400'
             }`}
           >
-            {isFull ? 'TABLE FULL (READY)' : `WAITING FOR ${neededPlayers} MORE`}
+            {canStart
+              ? isFull
+                ? 'TABLE FULL (READY)'
+                : `READY TO START (${room.players.length}/${maxPlayers})`
+              : `WAITING FOR ${neededPlayers} MORE`}
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {[0, 1, 2, 3].map((slotIndex) => {
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: maxPlayers }).map((_, slotIndex) => {
             const player: RoomPlayer | undefined = room.players[slotIndex];
 
             if (player) {
@@ -248,7 +259,7 @@ export const RoomLobbyView: React.FC<RoomLobbyViewProps> = ({
                     Seat Open
                   </span>
                   <span className="text-[10px] font-mono-code text-zinc-600">
-                    Waiting for player to enter code...
+                    {slotIndex < minPlayers ? 'Required seat...' : 'Optional seat...'}
                   </span>
                 </div>
               </div>
@@ -271,10 +282,10 @@ export const RoomLobbyView: React.FC<RoomLobbyViewProps> = ({
         {isHost ? (
           <button
             type="button"
-            disabled={!isFull || isStarting}
+            disabled={!canStart || isStarting}
             onClick={handleStart}
             className={`w-full sm:w-auto px-8 py-4 rounded-2xl font-display font-black text-sm uppercase tracking-wider flex items-center justify-center gap-3 transition-all duration-300 shadow-xl ${
-              isFull && !isStarting
+              canStart && !isStarting
                 ? 'bg-gradient-to-r from-[#E50914] to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-red-950/60 hover:shadow-[0_0_30px_rgba(229,9,20,0.6)] cursor-pointer'
                 : 'bg-[#1F1F1F] text-zinc-600 border border-[#2A2A2A] cursor-not-allowed'
             }`}
@@ -283,9 +294,9 @@ export const RoomLobbyView: React.FC<RoomLobbyViewProps> = ({
             <span>
               {isStarting
                 ? 'INITIALIZING MATCH...'
-                : isFull
-                ? `START ${room.totalRounds || 5}-ROUND MATCH`
-                : `NEED 4 PLAYERS (${room.players.length}/4)`}
+                : canStart
+                ? `START ${room.players.length}-PLAYER MATCH`
+                : `NEED AT LEAST ${minPlayers} PLAYERS (${room.players.length}/${minPlayers})`}
             </span>
           </button>
         ) : (
