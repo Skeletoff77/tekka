@@ -314,8 +314,17 @@ export async function submitChakrantoAction(
       currentActionPayload.targetPlayerId = target.id;
     }
 
+    // Deduct coin cost immediately if applicable (Ghar Motkano: 3 coins)
+    let updatedPlayers = publicState.players;
+    if (action === 'ghar_motkano') {
+      updatedPlayers = publicState.players.map((p) =>
+        p.id === actingUid ? { ...p, coins: p.coins - 3 } : p
+      );
+    }
+
     transaction.update(publicRef, {
       phase: 'ACTION_PENDING_RESPONSE',
+      players: updatedPlayers,
       currentAction: currentActionPayload,
       currentBlock: null,
       currentChallenge: null,
@@ -324,7 +333,11 @@ export async function submitChakrantoAction(
       updatedAt: now,
     });
 
-    trackChakrantoActionAttempt({ roomId, action });
+    trackChakrantoActionAttempt({
+      roomId,
+      action,
+      ...(action === 'ghar_motkano' ? { coinsSpent: 3 } : {}),
+    });
   });
 }
 
@@ -778,11 +791,8 @@ export async function submitChakrantoPass(
       return;
     }
 
-    // 4. GHAR MOTKANO (-3 coins, target sacrifices 1 card)
+    // 4. GHAR MOTKANO (target sacrifices 1 card; 3 coins were deducted at declaration)
     if (action === 'ghar_motkano' && target) {
-      const updatedPlayers = publicState.players.map((p) =>
-        p.id === actorId ? { ...p, coins: Math.max(0, p.coins - 3) } : p
-      );
       const log: ChakrantoEventLog = {
         id: createLogId(),
         turnNumber: publicState.turnNumber,
@@ -795,7 +805,6 @@ export async function submitChakrantoPass(
 
       transaction.update(publicRef, {
         phase: 'SACRIFICE_SELECTION',
-        players: updatedPlayers,
         pendingSacrifice: {
           targetPlayerId: target.id,
           reason: 'GHAR_MOTKANO',
@@ -805,7 +814,7 @@ export async function submitChakrantoPass(
         updatedAt: now,
       });
 
-      trackChakrantoActionResolved({ roomId, action: 'ghar_motkano', coinsSpent: 3 });
+      trackChakrantoActionResolved({ roomId, action: 'ghar_motkano' });
       return;
     }
 
@@ -1126,10 +1135,7 @@ export async function submitChakrantoSacrifice(
         }
 
         if (action === 'ghar_motkano' && targetId) {
-          const playersWithCost = updatedPlayers.map((p) =>
-            p.id === actorId ? { ...p, coins: Math.max(0, p.coins - 3) } : p
-          );
-          const targetPlayer = playersWithCost.find((p) => p.id === targetId);
+          const targetPlayer = updatedPlayers.find((p) => p.id === targetId);
 
           if (targetPlayer && !targetPlayer.isEliminated) {
             // Target is still alive -> Ghar Motkano requires target to sacrifice their next card!
@@ -1144,7 +1150,7 @@ export async function submitChakrantoSacrifice(
             };
             transaction.update(publicRef, {
               phase: 'SACRIFICE_SELECTION',
-              players: playersWithCost,
+              players: updatedPlayers,
               pendingSacrifice: {
                 targetPlayerId: targetId,
                 reason: 'GHAR_MOTKANO',
@@ -1157,17 +1163,17 @@ export async function submitChakrantoSacrifice(
               updatedAt: now,
             });
             trackChakrantoSacrifice({ roomId, isElimination: isEliminated });
-            trackChakrantoActionResolved({ roomId, action: 'ghar_motkano', coinsSpent: 3 });
+            trackChakrantoActionResolved({ roomId, action: 'ghar_motkano' });
             return;
           } else {
             // Target was already eliminated by the bluff sacrifice
-            const nextPlayer = getNextAlivePosition(publicState.currentPosition, playersWithCost);
+            const nextPlayer = getNextAlivePosition(publicState.currentPosition, updatedPlayers);
             transaction.update(publicRef, {
               phase: 'TURN_ACTIVE',
               turnNumber: publicState.turnNumber + 1,
               currentTurnPlayerId: nextPlayer.id,
               currentPosition: nextPlayer.position,
-              players: playersWithCost,
+              players: updatedPlayers,
               pendingSacrifice: null,
               currentAction: null,
               currentBlock: null,
@@ -1177,7 +1183,7 @@ export async function submitChakrantoSacrifice(
               updatedAt: now,
             });
             trackChakrantoSacrifice({ roomId, isElimination: isEliminated });
-            trackChakrantoActionResolved({ roomId, action: 'ghar_motkano', coinsSpent: 3 });
+            trackChakrantoActionResolved({ roomId, action: 'ghar_motkano' });
             return;
           }
         }

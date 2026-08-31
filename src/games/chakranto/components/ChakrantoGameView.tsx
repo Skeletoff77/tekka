@@ -335,7 +335,7 @@ export const ChakrantoGameView: React.FC<ChakrantoGameViewProps> = ({
             </div>
           </div>
 
-          {/* My Secret Cards Hand */}
+          {/* My Cards Hand: Active Secret Cards + Publicly Sacrificed Cards */}
           <div className="flex items-center justify-center gap-3">
             {privateView?.activeCards && privateView.activeCards.length > 0 ? (
               privateView.activeCards.map((card) => (
@@ -346,13 +346,35 @@ export const ChakrantoGameView: React.FC<ChakrantoGameViewProps> = ({
                     showDetails={false}
                     className="w-20 sm:w-24 shadow-2xl hover:scale-105 transition-transform"
                   />
+                  <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 text-[8px] font-mono-code bg-green-950/90 text-green-300 border border-green-700/60 px-1.5 py-0.5 rounded shadow whitespace-nowrap">
+                    ACTIVE
+                  </div>
                 </div>
               ))
-            ) : me?.isEliminated ? (
+            ) : null}
+
+            {/* My Sacrificed Cards (Publicly Revealed) */}
+            {me?.sacrificedCards && me.sacrificedCards.length > 0 ? (
+              me.sacrificedCards.map((char, idx) => (
+                <div key={`my-sacrificed-${idx}`} className="relative group">
+                  <ChakrantoCard
+                    character={char}
+                    isSacrificed={true}
+                    size="sm"
+                    showDetails={false}
+                    className="w-20 sm:w-24 shadow-2xl transition-transform"
+                  />
+                </div>
+              ))
+            ) : null}
+
+            {me?.isEliminated && (!me.sacrificedCards || me.sacrificedCards.length === 0) && (
               <div className="px-4 py-2 rounded-2xl bg-red-950/40 border border-red-900/60 text-xs font-mono-code text-red-400">
                 You have been eliminated from this match.
               </div>
-            ) : (
+            )}
+
+            {!privateView?.activeCards && !me?.isEliminated && (
               <div className="text-xs font-mono-code text-zinc-500">Loading your cards...</div>
             )}
           </div>

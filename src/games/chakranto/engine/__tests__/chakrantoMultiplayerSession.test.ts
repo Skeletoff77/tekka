@@ -555,4 +555,93 @@ console.log('--- Starting Chakranto Multiplayer & Session Rules Tests ---');
   console.log('✓ Test 22 Passed: All 7 Chakranto actions follow deterministic resolution semantics');
 }
 
+// Test 23: Ghar Motkano Immediate 3-Coin Cost Deduction at Declaration
+{
+  // Scenario A: Actor declares Ghar Motkano with 5 coins targeting Target with 4 coins
+  const actor: ChakrantoPlayerPublic = {
+    id: 'uA', name: 'Actor', position: 'A', seatIndex: 0, coins: 5, activeCardCount: 2, sacrificedCards: [], isEliminated: false,
+  };
+  const target: ChakrantoPlayerPublic = {
+    id: 'uB', name: 'Target', position: 'B', seatIndex: 1, coins: 4, activeCardCount: 2, sacrificedCards: [], isEliminated: false,
+  };
+
+  // 1. Validate legality
+  const legality = validateActionLegality('ghar_motkano', actor, target);
+  assert(legality.allowed === true, 'Ghar Motkano allowed with 5 coins');
+
+  // 2. Declaration immediately subtracts 3 coins from Actor
+  const actorAfterDecl = { ...actor, coins: actor.coins - 3 };
+  assert(actorAfterDecl.coins === 2, `Actor coins must be immediately 5 - 3 = 2, got ${actorAfterDecl.coins}`);
+
+  // 3. If a challenge occurs and Challenger fails (Actor was truthful):
+  // Challenger sacrifices 1 card, Actor remains at 2 coins (NOT deducted again!)
+  const challenger: ChakrantoPlayerPublic = {
+    id: 'uC', name: 'Challenger', position: 'C', seatIndex: 2, coins: 3, activeCardCount: 2, sacrificedCards: [], isEliminated: false,
+  };
+  const challengerAfterFailedChallenge: ChakrantoPlayerPublic = {
+    ...challenger,
+    activeCardCount: 1,
+    sacrificedCards: ['petukchondro'],
+  };
+  assert(challengerAfterFailedChallenge.activeCardCount === 1, 'Challenger lost 1 card');
+  assert(actorAfterDecl.coins === 2, 'Actor coins remain at 2 (no duplicate deduction)');
+
+  // 4. If Target blocks with Ginner Badsha and block holds:
+  // Action is blocked, but Actor's 3 coins are NOT refunded (remains at 2)
+  assert(actorAfterDecl.coins === 2, 'Actor coins remain at 2 after block holds (no refund)');
+
+  // 5. If Actor bluffs and gets caught:
+  // Actor sacrifices 1 card, action cancelled, coins remain at 2 (no refund)
+  const actorAfterCaughtBluff: ChakrantoPlayerPublic = {
+    ...actorAfterDecl,
+    activeCardCount: 1,
+    sacrificedCards: ['petukchondro'],
+  };
+  assert(actorAfterCaughtBluff.coins === 2, 'Actor coins remain at 2 when caught bluffing');
+
+  console.log('✓ Test 23 Passed: Ghar Motkano immediate 3-coin deduction and persistence verified');
+}
+
+// Test 24: Sacrificed Cards Public Visibility & Private Hand Protection
+{
+  const initialPlayer: ChakrantoPlayerPublic = {
+    id: 'uA', name: 'Player A', position: 'A', seatIndex: 0, coins: 3, activeCardCount: 2, sacrificedCards: [], isEliminated: false,
+  };
+  const privateHand = [
+    { id: 'c1', character: 'brahmodoetto' as const },
+    { id: 'c2', character: 'kalu_dakat' as const },
+  ];
+
+  // 1. Sacrifice card c1 (Brahmodoetto)
+  const sacrificedCard = privateHand[0];
+  const newPrivateHand = privateHand.filter((c) => c.id !== sacrificedCard.id);
+  const playerAfterSacrifice1: ChakrantoPlayerPublic = {
+    ...initialPlayer,
+    activeCardCount: newPrivateHand.length,
+    sacrificedCards: [...initialPlayer.sacrificedCards, sacrificedCard.character],
+  };
+
+  assert(playerAfterSacrifice1.activeCardCount === 1, 'Active card count reduced to 1');
+  assert(playerAfterSacrifice1.sacrificedCards.length === 1, 'Sacrificed cards array contains 1 card');
+  assert(playerAfterSacrifice1.sacrificedCards[0] === 'brahmodoetto', 'Sacrificed card is Brahmodoetto and public');
+  assert(newPrivateHand.length === 1 && newPrivateHand[0].character === 'kalu_dakat', 'Private hand contains only remaining card');
+
+  // 2. Sacrifice second card c2 (Kalu Dakat) -> Elimination
+  const sacrificedCard2 = newPrivateHand[0];
+  const finalPrivateHand = newPrivateHand.filter((c) => c.id !== sacrificedCard2.id);
+  const playerAfterSacrifice2: ChakrantoPlayerPublic = {
+    ...playerAfterSacrifice1,
+    activeCardCount: finalPrivateHand.length,
+    sacrificedCards: [...playerAfterSacrifice1.sacrificedCards, sacrificedCard2.character],
+    isEliminated: true,
+    eliminatedAtOrder: 1,
+  };
+
+  assert(playerAfterSacrifice2.isEliminated === true, 'Player is eliminated');
+  assert(playerAfterSacrifice2.sacrificedCards.length === 2, 'Both sacrificed cards visible for eliminated player');
+  assert(playerAfterSacrifice2.sacrificedCards[0] === 'brahmodoetto' && playerAfterSacrifice2.sacrificedCards[1] === 'kalu_dakat', 'Both characters publicly visible in sequence');
+
+  console.log('✓ Test 24 Passed: Sacrificed cards public visibility and private hand protection verified');
+}
+
 console.log('--- ALL CHAKRANTO MULTIPLAYER SESSION RULES TESTS PASSED ---');

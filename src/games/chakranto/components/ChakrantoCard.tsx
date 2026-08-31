@@ -79,7 +79,7 @@ export const ChakrantoCard: React.FC<ChakrantoCardProps> = ({
       onClick={onClick}
       className={`relative rounded-2xl overflow-hidden transition-all duration-300 select-none bg-[#0D0D0D] ${
         isSacrificed
-          ? 'grayscale opacity-50 shadow-none'
+          ? 'ring-2 ring-red-600/70 shadow-lg brightness-95'
           : isSelected
           ? 'ring-2 ring-[#E50914] scale-105 shadow-[0_0_30px_rgba(229,9,20,0.6)]'
           : 'shadow-2xl hover:shadow-[0_8px_30px_rgba(0,0,0,0.8)]'
@@ -113,13 +113,19 @@ export const ChakrantoCard: React.FC<ChakrantoCardProps> = ({
         </div>
       )}
 
-      {/* Sacrificed Overlay */}
+      {/* Sacrificed Overlay Banner */}
       {isSacrificed && (
-        <div className="absolute inset-0 z-20 bg-black/60 backdrop-blur-[1px] flex flex-col items-center justify-center p-2 text-center">
-          <Skull className="w-8 h-8 text-zinc-300 mb-1 drop-shadow-md" />
-          <span className="text-[10px] font-mono-code font-bold uppercase tracking-wider text-red-300 bg-red-950/90 px-2 py-0.5 rounded border border-red-800/80 shadow">
-            SACRIFICED
-          </span>
+        <div className="absolute inset-0 z-20 pointer-events-none flex flex-col justify-between p-1 bg-red-950/20">
+          <div className="flex justify-end">
+            <span className="p-0.5 rounded-full bg-red-600/90 text-white shadow">
+              <Skull className="w-3 h-3 stroke-[2.5]" />
+            </span>
+          </div>
+          <div className="w-full text-center pb-0.5">
+            <span className="text-[8px] sm:text-[9px] font-mono-code font-black uppercase tracking-wider text-white bg-red-900/90 px-1 py-0.5 rounded border border-red-600/80 shadow-md block truncate">
+              SACRIFICED
+            </span>
+          </div>
         </div>
       )}
     </div>

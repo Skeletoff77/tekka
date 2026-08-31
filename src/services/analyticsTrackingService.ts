@@ -187,6 +187,7 @@ export async function trackChakrantoMatchFinish(params: {
 export async function trackChakrantoActionAttempt(params: {
   roomId: string;
   action: string;
+  coinsSpent?: number;
 }): Promise<void> {
   try {
     const matchRef = doc(db, 'gameMatches', params.roomId);
@@ -201,13 +202,19 @@ export async function trackChakrantoActionAttempt(params: {
     };
 
     const targetField = actionKeyMap[params.action];
+    const updatePayload: Record<string, any> = {
+      'chakrantoStats.totalTurns': increment(1),
+      updatedAt: new Date().toISOString(),
+    };
+
     if (targetField) {
-      await updateDoc(matchRef, {
-        [targetField]: increment(1),
-        'chakrantoStats.totalTurns': increment(1),
-        updatedAt: new Date().toISOString(),
-      });
+      updatePayload[targetField] = increment(1);
     }
+    if (params.coinsSpent) {
+      updatePayload['chakrantoStats.coinsSpent'] = increment(params.coinsSpent);
+    }
+
+    await updateDoc(matchRef, updatePayload);
   } catch {
     // Non-blocking
   }

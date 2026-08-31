@@ -109,46 +109,46 @@ export const ChakrantoTable: React.FC<ChakrantoTableProps> = ({
               ) : null}
 
               {/* Active & Sacrificed Cards Display */}
-              <div className="pt-2 border-t border-[#1C1C1C] flex items-center justify-between gap-2">
-                {/* Active Secret Card Backs */}
-                <div>
-                  <span className="text-[9px] font-mono-code uppercase text-zinc-500 block mb-1">
-                    ACTIVE CARDS ({player.activeCardCount})
+              <div className="pt-2.5 border-t border-[#1C1C1C] flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-mono-code uppercase text-zinc-400">
+                    Cards: <span className="text-white font-bold">{player.activeCardCount} active</span>
                   </span>
-                  <div className="flex items-center gap-1.5">
-                    {Array.from({ length: player.activeCardCount }).map((_, idx) => (
-                      <ChakrantoCard
-                        key={`active-card-${player.id}-${idx}`}
-                        isBack={true}
-                        size="sm"
-                        className="!w-8 !rounded-lg shadow"
-                      />
-                    ))}
-                    {player.activeCardCount === 0 && (
-                      <span className="text-[10px] font-mono-code text-zinc-600">0 cards</span>
-                    )}
-                  </div>
+                  {player.sacrificedCards && player.sacrificedCards.length > 0 && (
+                    <span className="text-[9px] font-mono-code uppercase text-red-400 font-bold">
+                      {player.sacrificedCards.length} sacrificed
+                    </span>
+                  )}
                 </div>
 
-                {/* Sacrificed (Revealed) Cards */}
-                {player.sacrificedCards.length > 0 && (
-                  <div>
-                    <span className="text-[9px] font-mono-code uppercase text-zinc-500 block mb-1">
-                      SACRIFICED
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      {player.sacrificedCards.map((char, idx) => (
-                        <ChakrantoCard
-                          key={`sacrificed-${player.id}-${idx}`}
-                          character={char}
-                          isSacrificed={true}
-                          size="sm"
-                          className="!w-8 !rounded-lg shadow"
-                        />
-                      ))}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Active Secret Card Backs */}
+                  {Array.from({ length: player.activeCardCount }).map((_, idx) => (
+                    <div key={`active-card-${player.id}-${idx}`} className="relative">
+                      <ChakrantoCard
+                        isBack={true}
+                        size="sm"
+                        className="!w-11 sm:!w-12 !rounded-xl shadow-md border border-zinc-700/50"
+                      />
                     </div>
-                  </div>
-                )}
+                  ))}
+
+                  {/* Sacrificed (Revealed Face-Up) Cards */}
+                  {player.sacrificedCards && player.sacrificedCards.map((char, idx) => (
+                    <div key={`sacrificed-${player.id}-${idx}`} className="relative">
+                      <ChakrantoCard
+                        character={char}
+                        isSacrificed={true}
+                        size="sm"
+                        className="!w-11 sm:!w-12 !rounded-xl shadow-md"
+                      />
+                    </div>
+                  ))}
+
+                  {player.activeCardCount === 0 && (!player.sacrificedCards || player.sacrificedCards.length === 0) && (
+                    <span className="text-[10px] font-mono-code text-zinc-600">0 cards</span>
+                  )}
+                </div>
               </div>
             </div>
           );
