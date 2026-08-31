@@ -26,7 +26,12 @@ function assert(condition: boolean, msg: string) {
 
 console.log('--- Starting Chakranto Game Engine Tests ---');
 
-// 0. Test Action Definitions & Rewards (Roptani = +2, Birbikrom Bhata = +3)
+// 0. Test Action Definitions & Rewards (Ayy = +1, Roptani = +2, Birbikrom Bhata = +3)
+assert(CHAKRANTO_ACTIONS.ayy.coinGain === 1, `Ayy must give +1 coin, got ${CHAKRANTO_ACTIONS.ayy.coinGain}`);
+assert(CHAKRANTO_ACTIONS.ayy.coinCost === 0, 'Ayy cost must be 0');
+assert(CHAKRANTO_ACTIONS.ayy.isChallengeable === false, 'Ayy cannot be challenged');
+assert(CHAKRANTO_ACTIONS.ayy.isBlockable === false, 'Ayy cannot be blocked');
+
 assert(CHAKRANTO_ACTIONS.roptani.coinGain === 2, `Roptani must give +2 coins, got ${CHAKRANTO_ACTIONS.roptani.coinGain}`);
 assert(CHAKRANTO_ACTIONS.roptani.coinCost === 0, 'Roptani cost must be 0');
 assert(CHAKRANTO_ACTIONS.roptani.isChallengeable === false, 'Roptani cannot be challenged');
@@ -40,7 +45,7 @@ assert(CHAKRANTO_ACTIONS.birbikrom_bhata.isBlockable === false, 'Birbikrom Bhata
 assert(CHAKRANTO_ACTIONS.dakati.coinGain === 2, 'Dakati steals 2 coins');
 assert(CHAKRANTO_ACTIONS.ghar_motkano.coinCost === 3, 'Ghar Motkano costs 3 coins');
 assert(CHAKRANTO_ACTIONS.hottaya.coinCost === 7, 'Hottaya costs 7 coins');
-console.log('✓ Action definitions verified: Roptani (+2 coins), Birbikrom Bhata (+3 coins), Dakati (Steal 2), Ghar Motkano (Cost 3), Hottaya (Cost 7)');
+console.log('✓ Action definitions verified: Ayy (+1 coin), Roptani (+2 coins), Birbikrom Bhata (+3 coins), Dakati (Steal 2), Ghar Motkano (Cost 3), Hottaya (Cost 7)');
 
 // 1. Test Deck Generation
 const deck = generateChakrantoDeck();

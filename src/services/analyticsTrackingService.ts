@@ -52,6 +52,8 @@ export async function trackMatchStart(params: {
         totalTurns: 0,
         eliminations: 0,
         actions: {
+          ayyAttempted: 0,
+          ayyResolved: 0,
           roptaniAttempted: 0,
           roptaniResolved: 0,
           birbikromAttempted: 0,
@@ -189,6 +191,7 @@ export async function trackChakrantoActionAttempt(params: {
   try {
     const matchRef = doc(db, 'gameMatches', params.roomId);
     const actionKeyMap: Record<string, string> = {
+      ayy: 'chakrantoStats.actions.ayyAttempted',
       roptani: 'chakrantoStats.actions.roptaniAttempted',
       birbikrom_bhata: 'chakrantoStats.actions.birbikromAttempted',
       dakati: 'chakrantoStats.actions.dakatiAttempted',
@@ -223,6 +226,7 @@ export async function trackChakrantoActionResolved(params: {
   try {
     const matchRef = doc(db, 'gameMatches', params.roomId);
     const actionKeyMap: Record<string, string> = {
+      ayy: 'chakrantoStats.actions.ayyResolved',
       roptani: 'chakrantoStats.actions.roptaniResolved',
       birbikrom_bhata: 'chakrantoStats.actions.birbikromResolved',
       dakati: 'chakrantoStats.actions.dakatiResolved',

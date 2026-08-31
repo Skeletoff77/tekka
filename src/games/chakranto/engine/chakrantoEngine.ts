@@ -59,18 +59,24 @@ export function assignInitialPositions(
   roomPlayers: Array<{ id: string; tekkaName: string; avatarUrl?: string; photoURL?: string }>
 ): ChakrantoPlayerPublic[] {
   const shuffled = shuffleDeck(roomPlayers);
-  return shuffled.map((p, idx) => ({
-    id: p.id,
-    name: p.tekkaName,
-    position: CHAKRANTO_POSITIONS[idx],
-    seatIndex: idx,
-    avatarUrl: p.avatarUrl || p.photoURL,
-    coins: 0,
-    activeCardCount: 2,
-    sacrificedCards: [],
-    isEliminated: false,
-    isOnline: true,
-  }));
+  return shuffled.map((p, idx) => {
+    const player: ChakrantoPlayerPublic = {
+      id: p.id,
+      name: p.tekkaName,
+      position: CHAKRANTO_POSITIONS[idx],
+      seatIndex: idx,
+      coins: 0,
+      activeCardCount: 2,
+      sacrificedCards: [],
+      isEliminated: false,
+      isOnline: true,
+    };
+    const avatar = p.avatarUrl || p.photoURL;
+    if (avatar) {
+      player.avatarUrl = avatar;
+    }
+    return player;
+  });
 }
 
 /**

@@ -11,6 +11,7 @@ export type ChakrantoCharacter =
   | 'ginner_badsha';  // Ginner Badsha (জিনের বাদশা) - Block Ghar Motkano
 
 export type ChakrantoActionType =
+  | 'ayy'              // Ayy action (+1 coin). Unchallengeable, Unblockable
   | 'roptani'          // Normal action (+2 coins). Blockable by Bir Bikrom
   | 'dakati'           // Kalu Dakat action (+2 coins stolen). Challengeable, Blockable by Kalu Dakat or Petukchondro
   | 'shadhbodol'       // Petukchondro action (swap cards). Challengeable, Not blockable

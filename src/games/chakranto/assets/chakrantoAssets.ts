@@ -143,6 +143,16 @@ export interface ChakrantoActionMeta {
 }
 
 export const CHAKRANTO_ACTIONS: Record<ChakrantoActionType, ChakrantoActionMeta> = {
+  ayy: {
+    type: 'ayy',
+    name: 'Ayy',
+    bengaliName: 'আয়',
+    coinCost: 0,
+    coinGain: 1,
+    isChallengeable: false,
+    isBlockable: false,
+    description: 'Collect 1 coin from the treasury.',
+  },
   roptani: {
     type: 'roptani',
     name: 'Roptani',

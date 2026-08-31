@@ -121,6 +121,33 @@ export const ChakrantoActionPanel: React.FC<ChakrantoActionPanelProps> = ({
 
       {/* Primary Actions Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {/* 0. AYY */}
+        <button
+          type="button"
+          disabled={isMandatoryHottaya || isSubmitting}
+          onClick={() => handleSelectAction('ayy')}
+          className={`p-4 rounded-2xl border text-left transition-all flex flex-col justify-between ${
+            selectedAction === 'ayy'
+              ? 'bg-gradient-to-r from-red-950/70 to-[#1F1010] border-[#E50914] shadow-lg scale-[1.02]'
+              : 'bg-[#121212] border-[#262626] hover:border-zinc-500'
+          } ${isMandatoryHottaya ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+        >
+          <div className="flex items-start justify-between gap-1 mb-2">
+            <div>
+              <span className="text-[10px] font-mono-code text-zinc-500 uppercase">
+                {CHAKRANTO_ACTIONS.ayy.bengaliName}
+              </span>
+              <h4 className="text-sm font-display font-black text-white">Ayy</h4>
+            </div>
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono-code font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+              +1 COIN
+            </span>
+          </div>
+          <p className="text-[11px] font-sans text-zinc-400 line-clamp-2">
+            Collect 1 coin from the treasury. Cannot be challenged or blocked.
+          </p>
+        </button>
+
         {/* 1. ROPTANI */}
         <button
           type="button"

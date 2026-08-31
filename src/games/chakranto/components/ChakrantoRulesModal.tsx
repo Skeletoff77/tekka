@@ -128,6 +128,13 @@ export const ChakrantoRulesModal: React.FC<ChakrantoRulesModalProps> = ({ isOpen
               </thead>
               <tbody className="divide-y divide-[#1C1C1C]">
                 <tr>
+                  <td className="p-2.5 font-bold text-white">Ayy</td>
+                  <td className="p-2.5 text-zinc-400">None</td>
+                  <td className="p-2.5 text-amber-400 font-mono-code">+1 Coin</td>
+                  <td className="p-2.5 text-zinc-500">No</td>
+                  <td className="p-2.5 text-zinc-500 font-bold">Unblockable</td>
+                </tr>
+                <tr>
                   <td className="p-2.5 font-bold text-white">Roptani</td>
                   <td className="p-2.5 text-zinc-400">None</td>
                   <td className="p-2.5 text-emerald-400 font-mono-code">+2 Coins</td>

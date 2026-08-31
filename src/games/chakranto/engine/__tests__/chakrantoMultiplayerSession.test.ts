@@ -34,6 +34,30 @@ function assert(condition: boolean, msg: string) {
 
 console.log('--- Starting Chakranto Multiplayer & Session Rules Tests ---');
 
+// Test 0: Ayy Coin Award (+1 Coin)
+{
+  const p1: ChakrantoPlayerPublic = {
+    id: 'u1',
+    name: 'Player 1',
+    position: 'A',
+    seatIndex: 0,
+    coins: 0,
+    activeCardCount: 2,
+    sacrificedCards: [],
+    isEliminated: false,
+  };
+  const legality = validateActionLegality('ayy', p1);
+  assert(legality.allowed, 'Ayy should be allowed');
+  
+  // Apply Ayy effect: +1 coin
+  const updatedCoins = p1.coins + CHAKRANTO_ACTIONS.ayy.coinGain;
+  assert(updatedCoins === 1, `Expected 0 + 1 = 1 coin, got ${updatedCoins}`);
+  assert(CHAKRANTO_ACTIONS.ayy.coinGain === 1, 'Ayy coin gain must be exactly 1');
+  assert(CHAKRANTO_ACTIONS.ayy.isChallengeable === false, 'Ayy cannot be challenged');
+  assert(CHAKRANTO_ACTIONS.ayy.isBlockable === false, 'Ayy cannot be blocked');
+  console.log('✓ Test 0 Passed: Ayy gives +1 coin, is unchallengeable and unblockable');
+}
+
 // Test 1: Roptani Coin Award (+2 Coins)
 {
   const p1: ChakrantoPlayerPublic = {

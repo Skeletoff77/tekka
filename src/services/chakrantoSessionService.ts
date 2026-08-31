@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import {
+  ChakrantoActionDeclaration,
   ChakrantoActionType,
   ChakrantoAuthoritativeState,
   ChakrantoCardItem,
@@ -207,6 +208,46 @@ export async function submitChakrantoAction(
     const actionMeta = CHAKRANTO_ACTIONS[action];
     const claimedChar = actionMeta.associatedCharacter;
 
+    // Handle Ayy directly (Unchallengeable & Unblockable -> resolves immediately)
+    if (action === 'ayy') {
+      const updatedPlayers = publicState.players.map((p) => {
+        if (p.id === actingUid) {
+          return { ...p, coins: p.coins + 1 };
+        }
+        return p;
+      });
+
+      const nextPlayer = getNextAlivePosition(publicState.currentPosition, updatedPlayers);
+
+      const log: ChakrantoEventLog = {
+        id: createLogId(),
+        turnNumber: publicState.turnNumber,
+        timestamp: now,
+        type: 'ACTION',
+        message: `${actor.name} collected Ayy (+1 coin) from the treasury.`,
+        actorName: actor.name,
+      };
+
+      transaction.update(publicRef, {
+        phase: 'TURN_ACTIVE',
+        turnNumber: publicState.turnNumber + 1,
+        currentTurnPlayerId: nextPlayer.id,
+        currentPosition: nextPlayer.position,
+        players: updatedPlayers,
+        currentAction: null,
+        currentBlock: null,
+        currentChallenge: null,
+        pendingSacrifice: null,
+        passedPlayerIds: [],
+        logs: [log, ...publicState.logs].slice(0, 50),
+        updatedAt: now,
+      });
+
+      trackChakrantoActionAttempt({ roomId, action: 'ayy' });
+      trackChakrantoActionResolved({ roomId, action: 'ayy', coinsGenerated: 1 });
+      return;
+    }
+
     // Handle Hottaya directly (Unchallengeable & Unblockable)
     if (action === 'hottaya') {
       const updatedPlayers = publicState.players.map((p) => {
@@ -253,19 +294,29 @@ export async function submitChakrantoAction(
         ? `${actor.name} declared ${actionMeta.name} (${actionMeta.bengaliName}) targeting ${target.name}.`
         : `${actor.name} declared ${actionMeta.name} (${actionMeta.bengaliName}).`,
       actorName: actor.name,
-      targetName: target?.name,
-      character: claimedChar,
     };
+    if (target?.name) {
+      log.targetName = target.name;
+    }
+    if (claimedChar) {
+      log.character = claimedChar;
+    }
+
+    const currentActionPayload: ChakrantoActionDeclaration = {
+      action,
+      actorPlayerId: actingUid,
+      declaredAt: now,
+    };
+    if (claimedChar) {
+      currentActionPayload.claimedCharacter = claimedChar;
+    }
+    if (target?.id) {
+      currentActionPayload.targetPlayerId = target.id;
+    }
 
     transaction.update(publicRef, {
       phase: 'ACTION_PENDING_RESPONSE',
-      currentAction: {
-        action,
-        actorPlayerId: actingUid,
-        claimedCharacter: claimedChar,
-        targetPlayerId: target?.id,
-        declaredAt: now,
-      },
+      currentAction: currentActionPayload,
       currentBlock: null,
       currentChallenge: null,
       passedPlayerIds: [],
@@ -856,13 +907,16 @@ export async function submitChakrantoSacrifice(
 
     const updatedPlayers = publicState.players.map((p) => {
       if (p.id === sacrificingUid) {
-        return {
+        const updated: ChakrantoPlayerPublic = {
           ...p,
           activeCardCount: remainingActiveCount,
           sacrificedCards: [...p.sacrificedCards, cardToSacrifice.character],
           isEliminated,
-          eliminatedAtOrder: eliminationOrder,
         };
+        if (isEliminated && eliminationOrder !== undefined) {
+          updated.eliminatedAtOrder = eliminationOrder;
+        }
+        return updated;
       }
       return p;
     });

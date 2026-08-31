@@ -146,6 +146,8 @@ export interface ChakrantoAnalyticsData {
   totalEliminations: number;
   avgEliminationsPerMatch: number;
   actionStats: {
+    ayyAttempted: number;
+    ayyResolved: number;
     roptaniAttempted: number;
     roptaniResolved: number;
     birbikromAttempted: number;
@@ -203,6 +205,8 @@ export interface GameMatchRecord {
     totalTurns: number;
     eliminations: number;
     actions: {
+      ayyAttempted: number;
+      ayyResolved: number;
       roptaniAttempted: number;
       roptaniResolved: number;
       birbikromAttempted: number;

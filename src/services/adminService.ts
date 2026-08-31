@@ -769,6 +769,8 @@ export async function getChakrantoAnalytics(): Promise<ChakrantoAnalyticsData> {
   let totalEliminations = 0;
 
   const actionStats = {
+    ayyAttempted: 0,
+    ayyResolved: 0,
     roptaniAttempted: 0,
     roptaniResolved: 0,
     birbikromAttempted: 0,
@@ -848,6 +850,8 @@ export async function getChakrantoAnalytics(): Promise<ChakrantoAnalyticsData> {
       totalCardsSacrificed += s.cardsSacrificed || 0;
 
       if (s.actions) {
+        actionStats.ayyAttempted += s.actions.ayyAttempted || 0;
+        actionStats.ayyResolved += s.actions.ayyResolved || 0;
         actionStats.roptaniAttempted += s.actions.roptaniAttempted || 0;
         actionStats.roptaniResolved += s.actions.roptaniResolved || 0;
         actionStats.birbikromAttempted += s.actions.birbikromAttempted || 0;

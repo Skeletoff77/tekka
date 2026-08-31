@@ -45,6 +45,7 @@ export const ChakrantoTab: React.FC<ChakrantoTabProps> = ({ data, isLoading }) =
     blockTotal > 0 ? Math.round((data.blockStats.successful / blockTotal) * 100) : 0;
 
   const actions = [
+    { key: 'ayy', name: 'Ayy (আয়)', declared: data.actionStats.ayyAttempted || 0, resolved: data.actionStats.ayyResolved || 0 },
     { key: 'roptani', name: 'Roptani (রপ্তানি)', declared: data.actionStats.roptaniAttempted, resolved: data.actionStats.roptaniResolved },
     { key: 'birbikrom', name: 'Birbikrom Bhata (বীরবিক্রম ভাতা)', declared: data.actionStats.birbikromAttempted, resolved: data.actionStats.birbikromResolved },
     { key: 'dakati', name: 'Dakati (ডাকাতি)', declared: data.actionStats.dakatiAttempted, resolved: data.actionStats.dakatiResolved },
