@@ -171,7 +171,7 @@ export const ChakrantoResponseModal: React.FC<ChakrantoResponseModalProps> = ({
       availableBlockChars.push('ginner_badsha');
     }
 
-    const canChallenge = !!currentAction.claimedCharacter;
+    const canChallenge = !currentAction.isClaimVerified && !!currentAction.claimedCharacter;
 
     return (
       <div className="p-6 rounded-3xl bg-gradient-to-b from-[#1C0E0E] to-[#0A0A0A] border-2 border-[#E50914] shadow-2xl space-y-4 animate-in fade-in">
@@ -183,9 +183,16 @@ export const ChakrantoResponseModal: React.FC<ChakrantoResponseModalProps> = ({
             </span>
           </div>
 
-          <span className="px-2.5 py-1 rounded-xl bg-red-950/60 border border-red-800/60 text-[10px] font-mono-code font-bold text-red-300">
-            {actionMeta.bengaliName}
-          </span>
+          <div className="flex items-center gap-2">
+            {currentAction.isClaimVerified && (
+              <span className="px-2.5 py-1 rounded-xl bg-emerald-950/60 border border-emerald-800/60 text-[10px] font-mono-code font-bold text-emerald-300 flex items-center gap-1">
+                <Check className="w-3 h-3" /> VERIFIED TRUTHFUL
+              </span>
+            )}
+            <span className="px-2.5 py-1 rounded-xl bg-red-950/60 border border-red-800/60 text-[10px] font-mono-code font-bold text-red-300">
+              {actionMeta.bengaliName}
+            </span>
+          </div>
         </div>
 
         <div className="p-4 rounded-2xl bg-black/60 border border-white/10 space-y-2">
@@ -203,7 +210,11 @@ export const ChakrantoResponseModal: React.FC<ChakrantoResponseModalProps> = ({
             )}
             {isTarget && <strong className="text-red-400"> targeting YOU!</strong>}
           </p>
-          <p className="text-xs font-sans text-zinc-400">{actionMeta.description}</p>
+          <p className="text-xs font-sans text-zinc-400">
+            {currentAction.isClaimVerified
+              ? 'This character claim was challenged and proven truthful. The action is now active — you may declare a block or pass.'
+              : actionMeta.description}
+          </p>
         </div>
 
         {errorMsg && (

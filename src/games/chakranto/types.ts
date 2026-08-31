@@ -60,6 +60,7 @@ export interface ChakrantoActionDeclaration {
   claimedCharacter?: ChakrantoCharacter;
   targetPlayerId?: string;
   declaredAt: string;
+  isClaimVerified?: boolean;
 }
 
 export interface ChakrantoBlockDeclaration {
@@ -81,6 +82,7 @@ export interface ChakrantoPendingSacrifice {
   targetPlayerId: string;
   reason: 'HOTTAYA' | 'GHAR_MOTKANO' | 'FAILED_CHALLENGE' | 'BLUFF_CAUGHT';
   requiredCount: number;
+  challengeContext?: 'ACTION' | 'BLOCK';
 }
 
 export interface ChakrantoEventLog {

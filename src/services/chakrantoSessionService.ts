@@ -360,6 +360,9 @@ export async function submitChakrantoChallenge(
     let context: 'ACTION' | 'BLOCK' = 'ACTION';
 
     if (publicState.phase === 'ACTION_PENDING_RESPONSE') {
+      if (publicState.currentAction?.isClaimVerified) {
+        throw new Error('This action claim has already been verified and cannot be challenged again.');
+      }
       if (!publicState.currentAction?.claimedCharacter) {
         throw new Error('This action has no character claim to challenge.');
       }
@@ -437,18 +440,35 @@ export async function submitChakrantoChallenge(
         character: claimedCharacter,
       };
 
+      const updatedAction = publicState.currentAction
+        ? {
+            ...publicState.currentAction,
+            ...(context === 'ACTION' ? { isClaimVerified: true } : {}),
+          }
+        : null;
+
       transaction.update(publicRef, {
         phase: 'SACRIFICE_SELECTION',
+        ...(updatedAction ? { currentAction: updatedAction } : {}),
+        currentChallenge: {
+          challengerPlayerId: challengerUid,
+          challengedPlayerId: challengedUid,
+          claimedCharacter,
+          context,
+          declaredAt: now,
+        },
         pendingSacrifice: {
           targetPlayerId: challengerUid,
           reason: 'FAILED_CHALLENGE',
           requiredCount: 1,
+          challengeContext: context,
         },
         lastResolution: {
           message: `${defender.name} proved they held ${charMeta.name}!`,
           revealedCard: claimedCharacter,
           challengerWon: false,
         },
+        passedPlayerIds: [],
         logs: [log, ...publicState.logs].slice(0, 50),
         updatedAt: now,
       });
@@ -470,16 +490,25 @@ export async function submitChakrantoChallenge(
 
       transaction.update(publicRef, {
         phase: 'SACRIFICE_SELECTION',
+        currentChallenge: {
+          challengerPlayerId: challengerUid,
+          challengedPlayerId: challengedUid,
+          claimedCharacter,
+          context,
+          declaredAt: now,
+        },
         pendingSacrifice: {
           targetPlayerId: challengedUid,
           reason: 'BLUFF_CAUGHT',
           requiredCount: 1,
+          challengeContext: context,
         },
         lastResolution: {
           message: `${challenger.name} caught ${defender.name} bluffing!`,
           revealedCard: claimedCharacter,
           challengerWon: true,
         },
+        passedPlayerIds: [],
         logs: [log, ...publicState.logs].slice(0, 50),
         updatedAt: now,
       });
@@ -559,6 +588,8 @@ export async function submitChakrantoBlock(
         targetAction: action,
         declaredAt: now,
       },
+      currentChallenge: null,
+      passedPlayerIds: [],
       logs: [log, ...publicState.logs].slice(0, 50),
       updatedAt: now,
     });
@@ -649,35 +680,6 @@ export async function submitChakrantoPass(
     const targetId = publicState.currentAction.targetPlayerId;
     const actor = publicState.players.find((p) => p.id === actorId)!;
     const target = targetId ? publicState.players.find((p) => p.id === targetId) : null;
-
-    // Check if actor holds claimed character, consume & replace if so
-    if (publicState.currentAction.claimedCharacter) {
-      const claimedChar = publicState.currentAction.claimedCharacter;
-      const actorHand = authState.playerHands[actorId] || [];
-      const matching = actorHand.find((c) => c.character === claimedChar);
-      if (matching) {
-        const remaining = actorHand.filter((c) => c.id !== matching.id);
-        const replacement = drawReplacementCard(
-          authState.drawDeck,
-          [...authState.discardPile, matching],
-          authState.turnNumber
-        );
-        const newActorHand = [...remaining, replacement.card];
-
-        transaction.update(authRef, {
-          playerHands: { ...authState.playerHands, [actorId]: newActorHand },
-          drawDeck: replacement.newDrawDeck,
-          discardPile: replacement.newDiscardPile,
-          updatedAt: now,
-        });
-
-        const actorPrivRef = doc(db, 'rooms', roomId, 'chakrantoViews', actorId);
-        transaction.update(actorPrivRef, {
-          activeCards: newActorHand,
-          updatedAt: now,
-        });
-      }
-    }
 
     // 1. ROPTANI (+2 coins)
     if (action === 'roptani') {
@@ -996,9 +998,357 @@ export async function submitChakrantoSacrifice(
       return;
     }
 
-    // Otherwise, advance turn clockwise to next living player
-    const nextPlayer = getNextAlivePosition(publicState.currentPosition, updatedPlayers);
+    const pendingSacrifice = publicState.pendingSacrifice;
+    const currentAction = publicState.currentAction;
+    const currentBlock = publicState.currentBlock;
+    const currentChallenge = publicState.currentChallenge;
+    const reason = pendingSacrifice?.reason;
+    const challengeContext = pendingSacrifice?.challengeContext || currentChallenge?.context;
 
+    // Case 1: HOTTAYA or GHAR_MOTKANO sacrifice fulfilled
+    if (reason === 'HOTTAYA' || reason === 'GHAR_MOTKANO') {
+      const nextPlayer = getNextAlivePosition(publicState.currentPosition, updatedPlayers);
+      transaction.update(publicRef, {
+        phase: 'TURN_ACTIVE',
+        turnNumber: publicState.turnNumber + 1,
+        currentTurnPlayerId: nextPlayer.id,
+        currentPosition: nextPlayer.position,
+        players: updatedPlayers,
+        pendingSacrifice: null,
+        currentAction: null,
+        currentBlock: null,
+        currentChallenge: null,
+        passedPlayerIds: [],
+        logs: [sacrificeLog, ...publicState.logs].slice(0, 50),
+        updatedAt: now,
+      });
+      trackChakrantoSacrifice({ roomId, isElimination: isEliminated });
+      return;
+    }
+
+    // Case 2: BLUFF_CAUGHT
+    if (reason === 'BLUFF_CAUGHT') {
+      if (challengeContext === 'ACTION') {
+        // Actor was caught bluffing their action -> Action fails and is cancelled!
+        const nextPlayer = getNextAlivePosition(publicState.currentPosition, updatedPlayers);
+        transaction.update(publicRef, {
+          phase: 'TURN_ACTIVE',
+          turnNumber: publicState.turnNumber + 1,
+          currentTurnPlayerId: nextPlayer.id,
+          currentPosition: nextPlayer.position,
+          players: updatedPlayers,
+          pendingSacrifice: null,
+          currentAction: null,
+          currentBlock: null,
+          currentChallenge: null,
+          passedPlayerIds: [],
+          logs: [sacrificeLog, ...publicState.logs].slice(0, 50),
+          updatedAt: now,
+        });
+        trackChakrantoSacrifice({ roomId, isElimination: isEliminated });
+        return;
+      }
+
+      if (challengeContext === 'BLOCK' && currentAction) {
+        // Blocker was caught bluffing their block -> Block fails, original action SUCCEEDS!
+        const action = currentAction.action;
+        const actorId = currentAction.actorPlayerId;
+        const targetId = currentAction.targetPlayerId;
+        const actor = updatedPlayers.find((p) => p.id === actorId);
+
+        if (action === 'roptani') {
+          const playersWithCoins = updatedPlayers.map((p) =>
+            p.id === actorId ? { ...p, coins: p.coins + 2 } : p
+          );
+          const nextPlayer = getNextAlivePosition(publicState.currentPosition, playersWithCoins);
+          const log: ChakrantoEventLog = {
+            id: createLogId(),
+            turnNumber: publicState.turnNumber,
+            timestamp: now,
+            type: 'ACTION',
+            message: `${actor?.name || 'Actor'} completed Roptani (+2 coins) after bluffed block was defeated.`,
+            actorName: actor?.name,
+          };
+          transaction.update(publicRef, {
+            phase: 'TURN_ACTIVE',
+            turnNumber: publicState.turnNumber + 1,
+            currentTurnPlayerId: nextPlayer.id,
+            currentPosition: nextPlayer.position,
+            players: playersWithCoins,
+            pendingSacrifice: null,
+            currentAction: null,
+            currentBlock: null,
+            currentChallenge: null,
+            passedPlayerIds: [],
+            logs: [log, sacrificeLog, ...publicState.logs].slice(0, 50),
+            updatedAt: now,
+          });
+          trackChakrantoSacrifice({ roomId, isElimination: isEliminated });
+          trackChakrantoActionResolved({ roomId, action: 'roptani', coinsGenerated: 2 });
+          return;
+        }
+
+        if (action === 'dakati' && targetId) {
+          const targetPlayer = updatedPlayers.find((p) => p.id === targetId);
+          const stealAmount = targetPlayer ? Math.min(2, targetPlayer.coins) : 0;
+          const playersWithCoins = updatedPlayers.map((p) => {
+            if (p.id === actorId) return { ...p, coins: p.coins + stealAmount };
+            if (p.id === targetId) return { ...p, coins: p.coins - stealAmount };
+            return p;
+          });
+          const nextPlayer = getNextAlivePosition(publicState.currentPosition, playersWithCoins);
+          const log: ChakrantoEventLog = {
+            id: createLogId(),
+            turnNumber: publicState.turnNumber,
+            timestamp: now,
+            type: 'ACTION',
+            message: `${actor?.name || 'Actor'} raided ${targetPlayer?.name || 'Target'} for ${stealAmount} coins via Dakati after bluffed block was defeated.`,
+            actorName: actor?.name,
+            targetName: targetPlayer?.name,
+          };
+          transaction.update(publicRef, {
+            phase: 'TURN_ACTIVE',
+            turnNumber: publicState.turnNumber + 1,
+            currentTurnPlayerId: nextPlayer.id,
+            currentPosition: nextPlayer.position,
+            players: playersWithCoins,
+            pendingSacrifice: null,
+            currentAction: null,
+            currentBlock: null,
+            currentChallenge: null,
+            passedPlayerIds: [],
+            logs: [log, sacrificeLog, ...publicState.logs].slice(0, 50),
+            updatedAt: now,
+          });
+          trackChakrantoSacrifice({ roomId, isElimination: isEliminated });
+          trackChakrantoActionResolved({ roomId, action: 'dakati', coinsStolen: stealAmount });
+          return;
+        }
+
+        if (action === 'ghar_motkano' && targetId) {
+          const playersWithCost = updatedPlayers.map((p) =>
+            p.id === actorId ? { ...p, coins: Math.max(0, p.coins - 3) } : p
+          );
+          const targetPlayer = playersWithCost.find((p) => p.id === targetId);
+
+          if (targetPlayer && !targetPlayer.isEliminated) {
+            // Target is still alive -> Ghar Motkano requires target to sacrifice their next card!
+            const log: ChakrantoEventLog = {
+              id: createLogId(),
+              turnNumber: publicState.turnNumber,
+              timestamp: now,
+              type: 'ACTION',
+              message: `${actor?.name || 'Actor'} executed Ghar Motkano against ${targetPlayer.name} after defeating their bluffed block! ${targetPlayer.name} must sacrifice 1 card.`,
+              actorName: actor?.name,
+              targetName: targetPlayer.name,
+            };
+            transaction.update(publicRef, {
+              phase: 'SACRIFICE_SELECTION',
+              players: playersWithCost,
+              pendingSacrifice: {
+                targetPlayerId: targetId,
+                reason: 'GHAR_MOTKANO',
+                requiredCount: 1,
+              },
+              currentBlock: null,
+              currentChallenge: null,
+              passedPlayerIds: [],
+              logs: [log, sacrificeLog, ...publicState.logs].slice(0, 50),
+              updatedAt: now,
+            });
+            trackChakrantoSacrifice({ roomId, isElimination: isEliminated });
+            trackChakrantoActionResolved({ roomId, action: 'ghar_motkano', coinsSpent: 3 });
+            return;
+          } else {
+            // Target was already eliminated by the bluff sacrifice
+            const nextPlayer = getNextAlivePosition(publicState.currentPosition, playersWithCost);
+            transaction.update(publicRef, {
+              phase: 'TURN_ACTIVE',
+              turnNumber: publicState.turnNumber + 1,
+              currentTurnPlayerId: nextPlayer.id,
+              currentPosition: nextPlayer.position,
+              players: playersWithCost,
+              pendingSacrifice: null,
+              currentAction: null,
+              currentBlock: null,
+              currentChallenge: null,
+              passedPlayerIds: [],
+              logs: [sacrificeLog, ...publicState.logs].slice(0, 50),
+              updatedAt: now,
+            });
+            trackChakrantoSacrifice({ roomId, isElimination: isEliminated });
+            trackChakrantoActionResolved({ roomId, action: 'ghar_motkano', coinsSpent: 3 });
+            return;
+          }
+        }
+      }
+    }
+
+    // Case 3: FAILED_CHALLENGE
+    if (reason === 'FAILED_CHALLENGE') {
+      if (challengeContext === 'BLOCK') {
+        // Actor challenged blocker and lost (blocker was truthful) -> Block succeeded!
+        const nextPlayer = getNextAlivePosition(publicState.currentPosition, updatedPlayers);
+        transaction.update(publicRef, {
+          phase: 'TURN_ACTIVE',
+          turnNumber: publicState.turnNumber + 1,
+          currentTurnPlayerId: nextPlayer.id,
+          currentPosition: nextPlayer.position,
+          players: updatedPlayers,
+          pendingSacrifice: null,
+          currentAction: null,
+          currentBlock: null,
+          currentChallenge: null,
+          passedPlayerIds: [],
+          logs: [sacrificeLog, ...publicState.logs].slice(0, 50),
+          updatedAt: now,
+        });
+        trackChakrantoSacrifice({ roomId, isElimination: isEliminated });
+        trackChakrantoBlock({ roomId, successful: true });
+        return;
+      }
+
+      if (challengeContext === 'ACTION' && currentAction) {
+        // Challenger lost challenge against actor (actor was truthful)
+        const action = currentAction.action;
+        const actorId = currentAction.actorPlayerId;
+        const targetId = currentAction.targetPlayerId;
+        const actor = updatedPlayers.find((p) => p.id === actorId);
+
+        // 1. Birbikrom Bhata: unblockable -> resolves immediately (+3 coins)
+        if (action === 'birbikrom_bhata') {
+          const playersWithCoins = updatedPlayers.map((p) =>
+            p.id === actorId ? { ...p, coins: p.coins + 3 } : p
+          );
+          const nextPlayer = getNextAlivePosition(publicState.currentPosition, playersWithCoins);
+          const log: ChakrantoEventLog = {
+            id: createLogId(),
+            turnNumber: publicState.turnNumber,
+            timestamp: now,
+            type: 'ACTION',
+            message: `${actor?.name || 'Actor'} collected Biratwo Bhata (+3 coins) after winning challenge.`,
+            actorName: actor?.name,
+          };
+          transaction.update(publicRef, {
+            phase: 'TURN_ACTIVE',
+            turnNumber: publicState.turnNumber + 1,
+            currentTurnPlayerId: nextPlayer.id,
+            currentPosition: nextPlayer.position,
+            players: playersWithCoins,
+            pendingSacrifice: null,
+            currentAction: null,
+            currentBlock: null,
+            currentChallenge: null,
+            passedPlayerIds: [],
+            logs: [log, sacrificeLog, ...publicState.logs].slice(0, 50),
+            updatedAt: now,
+          });
+          trackChakrantoSacrifice({ roomId, isElimination: isEliminated });
+          trackChakrantoActionResolved({ roomId, action: 'birbikrom_bhata', coinsGenerated: 3 });
+          return;
+        }
+
+        // 2. Shadhbodol: unblockable -> proceeds to Shadhbodol card selection
+        if (action === 'shadhbodol') {
+          let deck = [...authState.drawDeck];
+          let discard = [...authState.discardPile];
+          if (deck.length < 2) {
+            deck = [...deck, ...shuffleDeck(discard)];
+            discard = [];
+          }
+          const drawn1 = deck.pop()!;
+          const drawn2 = deck.pop()!;
+          const actorHand = authState.playerHands[actorId] || [];
+
+          transaction.update(authRef, {
+            drawDeck: deck,
+            discardPile: discard,
+            shadhbodolActiveHand: {
+              userId: actorId,
+              originalCards: actorHand,
+              drawnCards: [drawn1, drawn2],
+            },
+            updatedAt: now,
+          });
+
+          const actorPrivRef = doc(db, 'rooms', roomId, 'chakrantoViews', actorId);
+          transaction.update(actorPrivRef, {
+            shadhbodolOptions: [...actorHand, drawn1, drawn2],
+            updatedAt: now,
+          });
+
+          const log: ChakrantoEventLog = {
+            id: createLogId(),
+            turnNumber: publicState.turnNumber,
+            timestamp: now,
+            type: 'ACTION',
+            message: `${actor?.name || 'Actor'} is performing Shadbodol after winning challenge.`,
+            actorName: actor?.name,
+          };
+
+          transaction.update(publicRef, {
+            phase: 'SHADHBODOL_SELECTION',
+            players: updatedPlayers,
+            pendingSacrifice: null,
+            currentChallenge: null,
+            passedPlayerIds: [],
+            logs: [log, sacrificeLog, ...publicState.logs].slice(0, 50),
+            updatedAt: now,
+          });
+          trackChakrantoSacrifice({ roomId, isElimination: isEliminated });
+          trackChakrantoActionResolved({ roomId, action: 'shadhbodol' });
+          return;
+        }
+
+        // 3. Blockable actions (roptani, dakati, ghar_motkano):
+        // Check if target is eliminated for targeted actions
+        if (targetId) {
+          const targetPlayer = updatedPlayers.find((p) => p.id === targetId);
+          if (targetPlayer?.isEliminated) {
+            // Target is dead -> action cannot continue
+            const nextPlayer = getNextAlivePosition(publicState.currentPosition, updatedPlayers);
+            transaction.update(publicRef, {
+              phase: 'TURN_ACTIVE',
+              turnNumber: publicState.turnNumber + 1,
+              currentTurnPlayerId: nextPlayer.id,
+              currentPosition: nextPlayer.position,
+              players: updatedPlayers,
+              pendingSacrifice: null,
+              currentAction: null,
+              currentBlock: null,
+              currentChallenge: null,
+              passedPlayerIds: [],
+              logs: [sacrificeLog, ...publicState.logs].slice(0, 50),
+              updatedAt: now,
+            });
+            trackChakrantoSacrifice({ roomId, isElimination: isEliminated });
+            return;
+          }
+        }
+
+        // Original action remains active and pending response!
+        // Target can now block or pass.
+        transaction.update(publicRef, {
+          phase: 'ACTION_PENDING_RESPONSE',
+          players: updatedPlayers,
+          currentAction: {
+            ...currentAction,
+            isClaimVerified: true,
+          },
+          currentBlock: null,
+          currentChallenge: null,
+          pendingSacrifice: null,
+          passedPlayerIds: [],
+          logs: [sacrificeLog, ...publicState.logs].slice(0, 50),
+          updatedAt: now,
+        });
+        trackChakrantoSacrifice({ roomId, isElimination: isEliminated });
+        return;
+      }
+    }
+
+    // Default fallback: advance turn
+    const nextPlayer = getNextAlivePosition(publicState.currentPosition, updatedPlayers);
     transaction.update(publicRef, {
       phase: 'TURN_ACTIVE',
       turnNumber: publicState.turnNumber + 1,
@@ -1013,11 +1363,7 @@ export async function submitChakrantoSacrifice(
       logs: [sacrificeLog, ...publicState.logs].slice(0, 50),
       updatedAt: now,
     });
-
-    trackChakrantoSacrifice({
-      roomId,
-      isElimination: isEliminated,
-    });
+    trackChakrantoSacrifice({ roomId, isElimination: isEliminated });
   });
 }
 
