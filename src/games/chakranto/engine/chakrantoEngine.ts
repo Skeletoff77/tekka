@@ -11,8 +11,10 @@ import {
   ChakrantoCharacter,
   ChakrantoPlayerPublic,
   ChakrantoPosition,
+  ChakrantoPublicState,
   ChakrantoStanding,
 } from '../types';
+import { CHAKRANTO_ACTIONS, CHAKRANTO_CHARACTERS } from '../assets/chakrantoAssets';
 
 export const ALL_CHARACTERS: readonly ChakrantoCharacter[] = [
   'brahmodoetto',
@@ -277,4 +279,251 @@ export function calculateChakrantoStandings(
       finalCoins: p.coins,
     };
   });
+}
+
+/**
+ * Consumes and replaces a character card from player's hand when successfully used.
+ * If the player was bluffing and not challenged, keeps hand intact.
+ * If already verified and replaced during challenge resolution, does not replace again.
+ */
+export function consumeAndReplaceClaimedCardIfNeeded(
+  playerHands: Record<string, ChakrantoCardItem[]>,
+  drawDeck: ChakrantoCardItem[],
+  discardPile: ChakrantoCardItem[],
+  actorId: string,
+  claimedCharacter?: ChakrantoCharacter,
+  isClaimVerified?: boolean,
+  turnNumber?: number
+): {
+  newHands: Record<string, ChakrantoCardItem[]>;
+  newDrawDeck: ChakrantoCardItem[];
+  newDiscardPile: ChakrantoCardItem[];
+  replaced: boolean;
+  newActorHand: ChakrantoCardItem[];
+} {
+  if (!claimedCharacter || isClaimVerified) {
+    return {
+      newHands: playerHands,
+      newDrawDeck: drawDeck,
+      newDiscardPile: discardPile,
+      replaced: false,
+      newActorHand: playerHands[actorId] || [],
+    };
+  }
+
+  const actorHand = playerHands[actorId] || [];
+  const matchingCard = actorHand.find((c) => c.character === claimedCharacter);
+  if (!matchingCard) {
+    // Player bluffed and was uncalled -> keep existing hand
+    return {
+      newHands: playerHands,
+      newDrawDeck: drawDeck,
+      newDiscardPile: discardPile,
+      replaced: false,
+      newActorHand: actorHand,
+    };
+  }
+
+  const remainingHand = actorHand.filter((c) => c.id !== matchingCard.id);
+  const replacement = drawReplacementCard(
+    drawDeck,
+    [...discardPile, matchingCard],
+    turnNumber || 1
+  );
+  const newActorHand = [...remainingHand, replacement.card];
+
+  return {
+    newHands: {
+      ...playerHands,
+      [actorId]: newActorHand,
+    },
+    newDrawDeck: replacement.newDrawDeck,
+    newDiscardPile: replacement.newDiscardPile,
+    replaced: true,
+    newActorHand,
+  };
+}
+
+export interface ChakrantoPlayerInstructionInfo {
+  headline: string;
+  detail: string;
+  isActor: boolean;
+  isTarget: boolean;
+  isBlocker: boolean;
+  canBlock: boolean;
+  canChallenge: boolean;
+  canPass: boolean;
+  availableBlockChars: ChakrantoCharacter[];
+}
+
+/**
+ * Computes player-specific instruction and actionable controls based on viewer's identity.
+ */
+export function getChakrantoPlayerInstruction(
+  publicState: ChakrantoPublicState,
+  viewerUserId: string
+): ChakrantoPlayerInstructionInfo {
+  const me = publicState.players.find((p) => p.id === viewerUserId);
+  const isActionPending = publicState.phase === 'ACTION_PENDING_RESPONSE';
+  const isBlockPending = publicState.phase === 'BLOCK_PENDING_RESPONSE';
+  const currentAction = publicState.currentAction;
+  const currentBlock = publicState.currentBlock;
+
+  const defaultRes: ChakrantoPlayerInstructionInfo = {
+    headline: '',
+    detail: '',
+    isActor: false,
+    isTarget: false,
+    isBlocker: false,
+    canBlock: false,
+    canChallenge: false,
+    canPass: false,
+    availableBlockChars: [],
+  };
+
+  if (!me || me.isEliminated) return defaultRes;
+
+  if (isBlockPending && currentBlock && currentAction) {
+    const isActor = currentAction.actorPlayerId === viewerUserId;
+    const isBlocker = currentBlock.blockerPlayerId === viewerUserId;
+    const blocker = publicState.players.find((p) => p.id === currentBlock.blockerPlayerId);
+    const actor = publicState.players.find((p) => p.id === currentAction.actorPlayerId);
+    const blockerName = blocker ? blocker.name : 'Opponent';
+    const actorName = actor ? actor.name : 'Opponent';
+    const blockCharMeta = CHAKRANTO_CHARACTERS[currentBlock.claimedCharacter];
+
+    if (isActor) {
+      return {
+        headline: `${blockerName} is attempting to block your ${currentBlock.targetAction.toUpperCase()} by claiming ${blockCharMeta.name}.`,
+        detail: 'Do you believe them, or do you want to call their BLUFF?',
+        isActor: true,
+        isTarget: false,
+        isBlocker: false,
+        canBlock: false,
+        canChallenge: true, // ONLY the action actor can challenge the block
+        canPass: true,      // Actor can accept the block
+        availableBlockChars: [],
+      };
+    }
+
+    if (isBlocker) {
+      return {
+        headline: `You declared a block claiming ${blockCharMeta.name} (${blockCharMeta.bengaliName}) against ${actorName}'s ${currentBlock.targetAction.toUpperCase()}.`,
+        detail: `Waiting for ${actorName} to accept or challenge your block...`,
+        isActor: false,
+        isTarget: true,
+        isBlocker: true,
+        canBlock: false,
+        canChallenge: false,
+        canPass: false,
+        availableBlockChars: [],
+      };
+    }
+
+    // Third-party viewer (C, D, E)
+    return {
+      headline: `${blockerName} is attempting to block ${actorName}'s ${currentBlock.targetAction.toUpperCase()} by claiming ${blockCharMeta.name}.`,
+      detail: `Waiting for ${actorName} to accept or challenge the block...`,
+      isActor: false,
+      isTarget: false,
+      isBlocker: false,
+      canBlock: false,
+      canChallenge: false,
+      canPass: false,
+      availableBlockChars: [],
+    };
+  }
+
+  if (isActionPending && currentAction) {
+    const isActor = currentAction.actorPlayerId === viewerUserId;
+    const isTarget = currentAction.targetPlayerId === viewerUserId;
+    const actor = publicState.players.find((p) => p.id === currentAction.actorPlayerId);
+    const target = currentAction.targetPlayerId
+      ? publicState.players.find((p) => p.id === currentAction.targetPlayerId)
+      : null;
+    const actorName = actor ? actor.name : 'Opponent';
+    const targetName = target ? target.name : 'Opponent';
+    const actionMeta = CHAKRANTO_ACTIONS[currentAction.action];
+
+    if (isActor) {
+      const headline = target
+        ? `You are trying to ${actionMeta.name} on ${targetName}.`
+        : `You declared ${actionMeta.name}.`;
+      return {
+        headline,
+        detail: 'Waiting for opponents to challenge, block, or pass.',
+        isActor: true,
+        isTarget: false,
+        isBlocker: false,
+        canBlock: false,
+        canChallenge: false,
+        canPass: false,
+        availableBlockChars: [],
+      };
+    }
+
+    // Available block characters
+    const availableBlockChars: ChakrantoCharacter[] = [];
+    if (currentAction.action === 'roptani') {
+      // Any living opponent can block Roptani with Bir Bikrom
+      availableBlockChars.push('bir_bikrom');
+    } else if (currentAction.action === 'dakati' && isTarget) {
+      // Target only can block Dakati with Kalu Dakat or Petukchondro
+      availableBlockChars.push('kalu_dakat', 'petukchondro');
+    } else if (currentAction.action === 'ghar_motkano' && isTarget) {
+      // Target only can block Ghar Motkano with Ginner Badsha
+      availableBlockChars.push('ginner_badsha');
+    }
+
+    const canBlock = availableBlockChars.length > 0;
+    const canChallenge = !currentAction.isClaimVerified && !!currentAction.claimedCharacter;
+    const canPass = true;
+
+    if (isTarget) {
+      const charClaimText = currentAction.claimedCharacter
+        ? ` claiming ${CHAKRANTO_CHARACTERS[currentAction.claimedCharacter].name}`
+        : '';
+      const headline = `${actorName} is trying to ${actionMeta.name}${charClaimText} on you!`;
+      const detail = currentAction.isClaimVerified
+        ? 'This character claim was challenged and proven truthful. The action is now active — you may declare a block or pass.'
+        : actionMeta.description;
+
+      return {
+        headline,
+        detail,
+        isActor: false,
+        isTarget: true,
+        isBlocker: false,
+        canBlock,
+        canChallenge,
+        canPass,
+        availableBlockChars,
+      };
+    }
+
+    // Third-party viewer (C, D, E)
+    const charClaimText = currentAction.claimedCharacter
+      ? ` claiming ${CHAKRANTO_CHARACTERS[currentAction.claimedCharacter].name}`
+      : '';
+    const headline = target
+      ? `${actorName} is trying to ${actionMeta.name}${charClaimText} on ${targetName}.`
+      : `${actorName} declared ${actionMeta.name}${charClaimText}.`;
+    const detail = currentAction.isClaimVerified
+      ? 'This character claim was challenged and proven truthful.'
+      : actionMeta.description;
+
+    return {
+      headline,
+      detail,
+      isActor: false,
+      isTarget: false,
+      isBlocker: false,
+      canBlock, // true only for Roptani
+      canChallenge,
+      canPass,
+      availableBlockChars,
+    };
+  }
+
+  return defaultRes;
 }

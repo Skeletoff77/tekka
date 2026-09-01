@@ -32,7 +32,7 @@ export const INITIAL_GAMES: Game[] = [
       },
       {
         title: 'Action or Bluff Declaration',
-        description: 'On your turn, declare an action (Roptani, Dakati, Shadbodol, Biratwo Bhata, Ghar Motkano, or Hottaya). You can claim any character even if you do not hold them!',
+        description: 'On your turn, declare an action (Roptani, Dakati, Shadbodol, Birotto Bhata, Ghar Motkano, or Hottaya). You can claim any character even if you do not hold them!',
       },
       {
         title: 'Challenges & Bluff Calling',

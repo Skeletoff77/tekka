@@ -12,6 +12,8 @@ import {
   evaluateChallengeClaim,
   drawReplacementCard,
   calculateChakrantoStandings,
+  consumeAndReplaceClaimedCardIfNeeded,
+  getChakrantoPlayerInstruction,
   ALL_CHARACTERS,
   COPIES_PER_CHARACTER,
 } from '../chakrantoEngine';
@@ -147,5 +149,105 @@ assert(standings[0].playerId === 'u1' && standings[0].rank === 1, 'Survivor is 1
 assert(standings[1].playerId === 'u3' && standings[1].rank === 2, 'Last eliminated is 2nd place');
 assert(standings[2].playerId === 'u2' && standings[2].rank === 3, 'First eliminated is 3rd place');
 console.log('✓ Standings (1st, 2nd, 3rd) calculated accurately based on elimination sequence');
+
+// 9. Test Character Card Consumption & Replacement
+const initialHands = {
+  u1: [
+    { id: 'bir_bikrom_1', character: 'bir_bikrom' as const },
+    { id: 'petukchondro_1', character: 'petukchondro' as const },
+  ],
+  u2: [
+    { id: 'kalu_dakat_1', character: 'kalu_dakat' as const },
+    { id: 'brahmodoetto_1', character: 'brahmodoetto' as const },
+  ],
+};
+const drawDeck = [
+  { id: 'ginner_badsha_1', character: 'ginner_badsha' as const },
+];
+const discardPile: any[] = [];
+
+// Truthful play of Bir Bikrom -> consumed and replaced
+const replaceRes1 = consumeAndReplaceClaimedCardIfNeeded(
+  initialHands,
+  drawDeck,
+  discardPile,
+  'u1',
+  'bir_bikrom',
+  false,
+  1
+);
+assert(replaceRes1.replaced === true, 'Bir Bikrom card must be replaced when used');
+assert(replaceRes1.newActorHand.length === 2, 'Hand length stays 2');
+assert(!replaceRes1.newActorHand.some((c) => c.id === 'bir_bikrom_1'), 'Old Bir Bikrom card is gone');
+assert(replaceRes1.newActorHand.some((c) => c.id === 'ginner_badsha_1'), 'New card drawn into hand');
+assert(replaceRes1.newDiscardPile.some((c) => c.id === 'bir_bikrom_1'), 'Old card moved to discard pile');
+
+// Bluff play of Brahmodoetto by u1 (who doesn't hold it) -> NOT consumed or replaced
+const replaceRes2 = consumeAndReplaceClaimedCardIfNeeded(
+  initialHands,
+  drawDeck,
+  discardPile,
+  'u1',
+  'brahmodoetto',
+  false,
+  1
+);
+assert(replaceRes2.replaced === false, 'Bluffed card not held is not replaced');
+assert(replaceRes2.newActorHand[0].id === 'bir_bikrom_1', 'Hand remains unchanged');
+
+// Already verified claim -> NOT replaced again
+const replaceRes3 = consumeAndReplaceClaimedCardIfNeeded(
+  initialHands,
+  drawDeck,
+  discardPile,
+  'u1',
+  'bir_bikrom',
+  true, // already verified
+  1
+);
+assert(replaceRes3.replaced === false, 'Already verified claim is not replaced a second time');
+console.log('✓ Character card consumption and replacement logic verified');
+
+// 10. Test Player Instruction & Actionable Visibility
+const mockPublicState: any = {
+  phase: 'BLOCK_PENDING_RESPONSE',
+  turnNumber: 1,
+  currentPosition: 'A',
+  currentTurnPlayerId: 'u1',
+  players: [
+    { id: 'u1', name: 'Alice', position: 'A', seatIndex: 0, coins: 2, activeCardCount: 2, sacrificedCards: [], isEliminated: false },
+    { id: 'u2', name: 'Bob', position: 'B', seatIndex: 1, coins: 2, activeCardCount: 2, sacrificedCards: [], isEliminated: false },
+    { id: 'u3', name: 'Charlie', position: 'C', seatIndex: 2, coins: 2, activeCardCount: 2, sacrificedCards: [], isEliminated: false },
+  ],
+  currentAction: {
+    action: 'dakati',
+    actorPlayerId: 'u1',
+    targetPlayerId: 'u2',
+    claimedCharacter: 'kalu_dakat',
+    declaredAt: Date.now(),
+  },
+  currentBlock: {
+    blockerPlayerId: 'u2',
+    claimedCharacter: 'petukchondro',
+    targetAction: 'dakati',
+    declaredAt: Date.now(),
+  },
+  passedPlayerIds: [],
+  logs: [],
+};
+
+const instructionForActor = getChakrantoPlayerInstruction(mockPublicState, 'u1');
+assert(instructionForActor.isActor === true, 'Alice is actor');
+assert(instructionForActor.canChallenge === true, 'Alice can challenge Bob block');
+assert(instructionForActor.canPass === true, 'Alice can accept block');
+
+const instructionForBlocker = getChakrantoPlayerInstruction(mockPublicState, 'u2');
+assert(instructionForBlocker.isBlocker === true, 'Bob is blocker');
+assert(instructionForBlocker.canChallenge === false, 'Bob cannot challenge his own block');
+
+const instructionForThirdParty = getChakrantoPlayerInstruction(mockPublicState, 'u3');
+assert(instructionForThirdParty.isActor === false, 'Charlie is third party');
+assert(instructionForThirdParty.canChallenge === false, 'Charlie cannot challenge block');
+console.log('✓ Player instruction and block challenge authority verified');
 
 console.log('--- ALL CHAKRANTO ENGINE TESTS PASSED ---');

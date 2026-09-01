@@ -156,7 +156,7 @@ export const ChakrantoRulesModal: React.FC<ChakrantoRulesModalProps> = ({ isOpen
                   <td className="p-2.5 text-zinc-500">Unblockable</td>
                 </tr>
                 <tr>
-                  <td className="p-2.5 font-bold text-white">Biratwo Bhata</td>
+                  <td className="p-2.5 font-bold text-white">Birotto Bhata</td>
                   <td className="p-2.5 text-blue-400">Bir Bikrom</td>
                   <td className="p-2.5 text-blue-400 font-mono-code">+3 Coins</td>
                   <td className="p-2.5 text-amber-400">Yes</td>

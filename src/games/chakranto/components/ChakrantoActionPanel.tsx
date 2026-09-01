@@ -245,7 +245,7 @@ export const ChakrantoActionPanel: React.FC<ChakrantoActionPanelProps> = ({
               <span className="text-[10px] font-mono-code text-zinc-500 uppercase">
                 {CHAKRANTO_ACTIONS.birbikrom_bhata.bengaliName}
               </span>
-              <h4 className="text-sm font-display font-black text-white">Biratwo Bhata</h4>
+              <h4 className="text-sm font-display font-black text-white">Birotto Bhata</h4>
             </div>
             <span className="px-2 py-0.5 rounded text-[10px] font-mono-code font-bold bg-blue-500/20 text-blue-300 border border-blue-500/40">
               +3 COINS

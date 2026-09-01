@@ -55,8 +55,25 @@ export const ChakrantoResponseModal: React.FC<ChakrantoResponseModalProps> = ({
   if (isBlockPending && currentBlock) {
     const blocker = publicState.players.find((p) => p.id === currentBlock.blockerPlayerId);
     const blockerName = blocker ? blocker.name : 'Opponent';
+    const actor = publicState.players.find((p) => p.id === currentAction?.actorPlayerId);
+    const actorName = actor ? actor.name : 'Opponent';
     const isActor = currentAction?.actorPlayerId === currentUserId;
+    const isBlocker = currentBlock.blockerPlayerId === currentUserId;
     const blockCharMeta = CHAKRANTO_CHARACTERS[currentBlock.claimedCharacter];
+
+    let headerMessage = '';
+    let subMessage = '';
+
+    if (isActor) {
+      headerMessage = `${blockerName} is attempting to block your ${currentBlock.targetAction.toUpperCase()} by claiming ${blockCharMeta.name} (${blockCharMeta.bengaliName}).`;
+      subMessage = 'Do you believe them, or do you want to call their BLUFF?';
+    } else if (isBlocker) {
+      headerMessage = `You declared a BLOCK against ${actorName}'s ${currentBlock.targetAction.toUpperCase()} claiming ${blockCharMeta.name} (${blockCharMeta.bengaliName}).`;
+      subMessage = `Waiting for ${actorName} to accept or challenge your block...`;
+    } else {
+      headerMessage = `${blockerName} is attempting to block ${actorName}'s ${currentBlock.targetAction.toUpperCase()} by claiming ${blockCharMeta.name} (${blockCharMeta.bengaliName}).`;
+      subMessage = `Waiting for ${actorName} to accept or challenge the block...`;
+    }
 
     return (
       <div className="p-6 rounded-3xl bg-gradient-to-b from-[#1C1010] to-[#0A0A0A] border-2 border-red-600 shadow-2xl space-y-4 animate-in fade-in">
@@ -69,16 +86,10 @@ export const ChakrantoResponseModal: React.FC<ChakrantoResponseModalProps> = ({
 
         <div className="p-4 rounded-2xl bg-black/50 border border-white/10 space-y-2">
           <p className="text-sm font-sans text-zinc-200">
-            <strong>{blockerName}</strong> is attempting to block your{' '}
-            <strong className="text-white">{currentBlock.targetAction.toUpperCase()}</strong> by
-            claiming{' '}
-            <strong className="text-amber-300">
-              {blockCharMeta.name} ({blockCharMeta.bengaliName})
-            </strong>
-            .
+            {headerMessage}
           </p>
           <p className="text-xs font-sans text-zinc-400">
-            Do you believe them, or do you want to call their BLUFF?
+            {subMessage}
           </p>
         </div>
 
@@ -125,7 +136,7 @@ export const ChakrantoResponseModal: React.FC<ChakrantoResponseModalProps> = ({
           </div>
         ) : (
           <p className="text-xs font-mono-code text-zinc-500 text-center">
-            Waiting for the actor to accept or challenge the block...
+            {subMessage}
           </p>
         )}
       </div>
@@ -135,23 +146,29 @@ export const ChakrantoResponseModal: React.FC<ChakrantoResponseModalProps> = ({
   // 2. ACTION PENDING RESPONSE (Challenge / Block / Pass)
   if (isActionPending && currentAction) {
     const isActor = currentAction.actorPlayerId === currentUserId;
+    const isTarget = currentAction.targetPlayerId === currentUserId;
+    const actor = publicState.players.find((p) => p.id === currentAction.actorPlayerId);
+    const actorName = actor ? actor.name : 'Opponent';
+    const target = currentAction.targetPlayerId
+      ? publicState.players.find((p) => p.id === currentAction.targetPlayerId)
+      : null;
+    const targetName = target ? target.name : 'Opponent';
+    const actionMeta = CHAKRANTO_ACTIONS[currentAction.action];
+
     if (isActor) {
       return (
         <div className="p-5 rounded-2xl bg-[#111111] border border-[#222222] text-center space-y-1">
           <span className="text-xs font-mono-code text-zinc-300 font-bold block">
-            Declaration in progress...
+            {target
+              ? `You are trying to ${actionMeta.name} on ${targetName}.`
+              : `You declared ${actionMeta.name}.`}
           </span>
           <span className="text-[11px] font-mono-code text-zinc-500">
-            Waiting for opponents to challenge, block, or pass.
+            Waiting for opponents to challenge, block, or pass...
           </span>
         </div>
       );
     }
-
-    const actor = publicState.players.find((p) => p.id === currentAction.actorPlayerId);
-    const actorName = actor ? actor.name : 'Opponent';
-    const actionMeta = CHAKRANTO_ACTIONS[currentAction.action];
-    const isTarget = currentAction.targetPlayerId === currentUserId;
 
     // Determine available blocks for current user:
     // - Roptani: Bir Bikrom (any living opponent)
@@ -165,13 +182,22 @@ export const ChakrantoResponseModal: React.FC<ChakrantoResponseModalProps> = ({
     const availableBlockChars: ChakrantoCharacter[] = [];
     if (currentAction.action === 'roptani') {
       availableBlockChars.push('bir_bikrom');
-    } else if (currentAction.action === 'dakati') {
+    } else if (currentAction.action === 'dakati' && isTarget) {
       availableBlockChars.push('kalu_dakat', 'petukchondro');
-    } else if (currentAction.action === 'ghar_motkano') {
+    } else if (currentAction.action === 'ghar_motkano' && isTarget) {
       availableBlockChars.push('ginner_badsha');
     }
 
     const canChallenge = !currentAction.isClaimVerified && !!currentAction.claimedCharacter;
+
+    let actionDescription = '';
+    if (isTarget) {
+      actionDescription = `${actorName} is trying to ${actionMeta.name} on you.`;
+    } else if (target) {
+      actionDescription = `${actorName} is trying to ${actionMeta.name} on ${targetName}.`;
+    } else {
+      actionDescription = `${actorName} declared ${actionMeta.name}.`;
+    }
 
     return (
       <div className="p-6 rounded-3xl bg-gradient-to-b from-[#1C0E0E] to-[#0A0A0A] border-2 border-[#E50914] shadow-2xl space-y-4 animate-in fade-in">
@@ -197,18 +223,17 @@ export const ChakrantoResponseModal: React.FC<ChakrantoResponseModalProps> = ({
 
         <div className="p-4 rounded-2xl bg-black/60 border border-white/10 space-y-2">
           <p className="text-sm font-sans text-zinc-200">
-            <strong>{actorName}</strong> declared{' '}
-            <strong className="text-[#FF4D4D]">{actionMeta.name}</strong>
+            <strong>{actionDescription}</strong>
             {currentAction.claimedCharacter && (
               <>
                 {' '}
-                claiming{' '}
+                (claiming{' '}
                 <strong className="text-amber-300">
                   {CHAKRANTO_CHARACTERS[currentAction.claimedCharacter].name}
                 </strong>
+                )
               </>
             )}
-            {isTarget && <strong className="text-red-400"> targeting YOU!</strong>}
           </p>
           <p className="text-xs font-sans text-zinc-400">
             {currentAction.isClaimVerified
