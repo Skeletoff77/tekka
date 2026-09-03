@@ -110,6 +110,7 @@ export interface GameAnalyticsData {
   gameId: string;
   gameName: string;
   totalStarted: number;
+  totalMatches: number; // Reconciled authoritative total matches (currentlyRunning + totalCompleted + abandoned)
   totalCompleted: number;
   currentlyRunning: number;
   abandoned: number;

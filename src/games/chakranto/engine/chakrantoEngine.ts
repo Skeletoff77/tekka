@@ -282,6 +282,73 @@ export function calculateChakrantoStandings(
 }
 
 /**
+ * Consumes and replaces a character card from player's hand IMMEDIATELY at action declaration
+ * if the player actually possesses the claimed character.
+ * If the player is bluffing (does not possess the card), no card is consumed or replaced.
+ */
+export function consumeAndReplaceOnActionDeclaration(
+  playerHands: Record<string, ChakrantoCardItem[]>,
+  drawDeck: ChakrantoCardItem[],
+  discardPile: ChakrantoCardItem[],
+  actorId: string,
+  claimedCharacter?: ChakrantoCharacter,
+  turnNumber?: number
+): {
+  newHands: Record<string, ChakrantoCardItem[]>;
+  newDrawDeck: ChakrantoCardItem[];
+  newDiscardPile: ChakrantoCardItem[];
+  consumed: boolean;
+  consumedCard?: ChakrantoCardItem;
+  replacementCard?: ChakrantoCardItem;
+  newActorHand: ChakrantoCardItem[];
+} {
+  const actorHand = playerHands[actorId] || [];
+  if (!claimedCharacter) {
+    return {
+      newHands: playerHands,
+      newDrawDeck: drawDeck,
+      newDiscardPile: discardPile,
+      consumed: false,
+      newActorHand: actorHand,
+    };
+  }
+
+  const matchingCard = actorHand.find((c) => c.character === claimedCharacter);
+  if (!matchingCard) {
+    // Player bluffed -> does not possess the card -> no consumption or replacement
+    return {
+      newHands: playerHands,
+      newDrawDeck: drawDeck,
+      newDiscardPile: discardPile,
+      consumed: false,
+      newActorHand: actorHand,
+    };
+  }
+
+  // Player actually possesses the claimed character -> immediately consume and replace!
+  const remainingHand = actorHand.filter((c) => c.id !== matchingCard.id);
+  const replacement = drawReplacementCard(
+    drawDeck,
+    [...discardPile, matchingCard],
+    turnNumber || 1
+  );
+  const newActorHand = [...remainingHand, replacement.card];
+
+  return {
+    newHands: {
+      ...playerHands,
+      [actorId]: newActorHand,
+    },
+    newDrawDeck: replacement.newDrawDeck,
+    newDiscardPile: replacement.newDiscardPile,
+    consumed: true,
+    consumedCard: matchingCard,
+    replacementCard: replacement.card,
+    newActorHand,
+  };
+}
+
+/**
  * Consumes and replaces a character card from player's hand when successfully used.
  * If the player was bluffing and not challenged, keeps hand intact.
  * If already verified and replaced during challenge resolution, does not replace again.

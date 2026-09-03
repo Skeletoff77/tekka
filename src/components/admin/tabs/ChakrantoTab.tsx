@@ -20,7 +20,7 @@ interface ChakrantoTabProps {
 }
 
 export const ChakrantoTab: React.FC<ChakrantoTabProps> = ({ data, isLoading }) => {
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="flex flex-col items-center gap-3">
@@ -29,6 +29,18 @@ export const ChakrantoTab: React.FC<ChakrantoTabProps> = ({ data, isLoading }) =
             Compiling Chakranto Tactical & Economic Telemetry...
           </span>
         </div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
+        <AlertTriangle className="w-8 h-8 text-amber-500" />
+        <span className="text-sm font-bold text-white">Chakranto Telemetry Unavailable</span>
+        <p className="text-xs text-zinc-400 font-mono-code max-w-md">
+          Unable to retrieve tactical game metrics from Firestore. Please verify your connection and permissions.
+        </p>
       </div>
     );
   }

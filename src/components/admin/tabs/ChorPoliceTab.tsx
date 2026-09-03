@@ -10,6 +10,7 @@ import {
   BarChart3,
   TrendingUp,
   ShieldAlert,
+  AlertTriangle,
 } from 'lucide-react';
 import { ChorPoliceAnalyticsData } from '../../../types/admin';
 
@@ -19,7 +20,7 @@ interface ChorPoliceTabProps {
 }
 
 export const ChorPoliceTab: React.FC<ChorPoliceTabProps> = ({ data, isLoading }) => {
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="flex flex-col items-center gap-3">
@@ -28,6 +29,18 @@ export const ChorPoliceTab: React.FC<ChorPoliceTabProps> = ({ data, isLoading })
             Compiling Chor Police Deep Match Telemetry...
           </span>
         </div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
+        <AlertTriangle className="w-8 h-8 text-amber-500" />
+        <span className="text-sm font-bold text-white">Chor Police Telemetry Unavailable</span>
+        <p className="text-xs text-zinc-400 font-mono-code max-w-md">
+          Unable to retrieve match metrics from Firestore. Please check your admin permissions or network connection.
+        </p>
       </div>
     );
   }

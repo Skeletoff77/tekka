@@ -169,22 +169,26 @@ export function startPresenceHeartbeat(params: {
   };
 }
 
+export interface LivePresenceBreakdown {
+  totalSessions: number;
+  uniqueOnlineUsers: number;
+  totalVisitors: number;
+  registeredGamers: number;
+  anonymousVisitors: number;
+  authenticatedUsers: number;
+  usersInRooms: number;
+  usersOnGameHub: number;
+  usersInGame: number;
+  usersInAdmin: number;
+}
+
 /**
  * Subscribes an authorized admin to live presence records.
  * Filters out records older than PRESENCE_OFFLINE_THRESHOLD_MS.
- * Distinguishes Online Sessions (open tabs) from Unique Online Users.
+ * Distinguishes Online Sessions (open tabs) from Unique Online Users and Admin vs Gamers.
  */
 export function subscribeToLivePresence(
-  callback: (presences: LivePresence[], breakdown: {
-    totalSessions: number;
-    uniqueOnlineUsers: number;
-    anonymousVisitors: number;
-    authenticatedUsers: number;
-    usersInRooms: number;
-    usersOnGameHub: number;
-    usersInGame: number;
-    usersInAdmin: number;
-  }) => void
+  callback: (presences: LivePresence[], breakdown: LivePresenceBreakdown) => void
 ): () => void {
   const presenceCol = collection(db, 'presence');
   
@@ -195,6 +199,7 @@ export function subscribeToLivePresence(
       const activeList: LivePresence[] = [];
 
       const uniqueAuthUids = new Set<string>();
+      const gamerAuthUids = new Set<string>();
       const uniqueAnonVisitors = new Set<string>();
 
       let inRoomsCount = 0;
@@ -212,6 +217,9 @@ export function subscribeToLivePresence(
             uniqueAnonVisitors.add(data.visitorId || data.sessionId);
           } else if (data.uid) {
             uniqueAuthUids.add(data.uid);
+            if (data.location !== 'admin-portal') {
+              gamerAuthUids.add(data.uid);
+            }
           }
 
           if (data.location === 'in-game') inGameCount++;
@@ -230,6 +238,8 @@ export function subscribeToLivePresence(
       callback(activeList, {
         totalSessions: activeList.length,
         uniqueOnlineUsers: uniqueOnlineCount,
+        totalVisitors: uniqueOnlineCount,
+        registeredGamers: gamerAuthUids.size,
         anonymousVisitors: uniqueAnonVisitors.size,
         authenticatedUsers: uniqueAuthUids.size,
         usersInRooms: inRoomsCount,
@@ -243,6 +253,8 @@ export function subscribeToLivePresence(
       callback([], {
         totalSessions: 0,
         uniqueOnlineUsers: 0,
+        totalVisitors: 0,
+        registeredGamers: 0,
         anonymousVisitors: 0,
         authenticatedUsers: 0,
         usersInRooms: 0,

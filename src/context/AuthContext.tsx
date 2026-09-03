@@ -84,7 +84,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             memberTier: data.memberTier || 'Early Access Member',
             bio: data.bio || 'Tactical strategist on the TEKKA gaming network.',
             country: data.country || 'Global',
-            wishlistedGameIds: Array.isArray(data.wishlistedGameIds) ? data.wishlistedGameIds : ['tekka-chor-police-dakat-babu'],
+            wishlistedGameIds: Array.isArray(data.wishlistedGameIds) ? data.wishlistedGameIds : ['chor-police-dakat-babu'],
             preferences: {
               emailNotifications: data.preferences?.emailNotifications ?? true,
               soundEffects: data.preferences?.soundEffects ?? true,

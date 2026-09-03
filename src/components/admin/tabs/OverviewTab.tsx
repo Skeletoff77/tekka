@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Clock,
   Laptop,
+  AlertTriangle,
 } from 'lucide-react';
 import { AdminOverviewStats } from '../../../types/admin';
 import { formatKolkataDateTime } from '../../../utils/dateUtils';
@@ -20,7 +21,7 @@ interface OverviewTabProps {
 }
 
 export const OverviewTab: React.FC<OverviewTabProps> = ({ stats, isLoading, onRefresh }) => {
-  if (isLoading || !stats) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="flex flex-col items-center gap-3">
@@ -29,6 +30,25 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ stats, isLoading, onRe
             Loading Real-Time Analytics...
           </span>
         </div>
+      </div>
+    );
+  }
+
+  if (!stats) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
+        <AlertTriangle className="w-8 h-8 text-amber-500" />
+        <span className="text-sm font-bold text-white">Authoritative Telemetry Unavailable</span>
+        <p className="text-xs text-zinc-400 font-mono-code max-w-md">
+          Failed to fetch real-time overview metrics from Firestore. The query could not be completed.
+        </p>
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="mt-2 px-4 py-2 rounded-lg bg-[#E50914] text-white text-xs font-mono-code font-bold hover:bg-red-600 transition-colors cursor-pointer"
+        >
+          Retry Fetching Telemetry
+        </button>
       </div>
     );
   }

@@ -61,6 +61,7 @@ export interface ChakrantoActionDeclaration {
   targetPlayerId?: string;
   declaredAt: string;
   isClaimVerified?: boolean;
+  characterConsumedAtDeclaration?: boolean;
 }
 
 export interface ChakrantoBlockDeclaration {

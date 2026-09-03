@@ -22,6 +22,7 @@ import {
   validateActionLegality,
   evaluateChallengeClaim,
   calculateChakrantoStandings,
+  consumeAndReplaceOnActionDeclaration,
 } from '../chakrantoEngine';
 import { CHAKRANTO_ACTIONS, CHAKRANTO_CHARACTERS } from '../../assets/chakrantoAssets';
 import { ChakrantoPlayerPublic, ChakrantoCharacter } from '../../types';
@@ -642,6 +643,96 @@ console.log('--- Starting Chakranto Multiplayer & Session Rules Tests ---');
   assert(playerAfterSacrifice2.sacrificedCards[0] === 'brahmodoetto' && playerAfterSacrifice2.sacrificedCards[1] === 'kalu_dakat', 'Both characters publicly visible in sequence');
 
   console.log('✓ Test 24 Passed: Sacrificed cards public visibility and private hand protection verified');
+}
+
+// Test 25: Character Card Immediate Consumption & Replacement at Declaration
+{
+  const characterActions: Array<{ action: string; character: ChakrantoCharacter }> = [
+    { action: 'birbikrom_bhata', character: 'bir_bikrom' },
+    { action: 'dakati', character: 'kalu_dakat' },
+    { action: 'shadhbodol', character: 'petukchondro' },
+    { action: 'ghar_motkano', character: 'brahmodoetto' },
+  ];
+
+  for (const { action, character } of characterActions) {
+    // 1. Truthful declaration: Actor owns the character card
+    const hands = {
+      actor: [
+        { id: `card_${character}_1`, character },
+        { id: 'card_dummy_2', character: 'ginner_badsha' as const },
+      ],
+      other: [
+        { id: 'card_other_1', character: 'bir_bikrom' as const },
+      ],
+    };
+    const drawDeck = [
+      { id: 'card_repl_99', character: 'petukchondro' as const },
+    ];
+    const discardPile: any[] = [];
+
+    const declResult = consumeAndReplaceOnActionDeclaration(
+      hands,
+      drawDeck,
+      discardPile,
+      'actor',
+      character,
+      1
+    );
+
+    // Assert consumption happened immediately at declaration
+    assert(declResult.consumed === true, `${action}: Character card must be consumed immediately at declaration`);
+    assert(declResult.newActorHand.length === 2, `${action}: Actor hand size must remain 2`);
+    assert(!declResult.newActorHand.some((c) => c.id === `card_${character}_1`), `${action}: Claimed card must be removed from actor hand`);
+    assert(declResult.newActorHand.some((c) => c.id === 'card_repl_99'), `${action}: Replacement card must be in actor hand before response phase`);
+    assert(declResult.newDiscardPile.some((c) => c.id === `card_${character}_1`), `${action}: Consumed card must be in discard pile`);
+
+    // Challenge evaluation when truthfully declared
+    const actionDeclaration = {
+      action,
+      actorPlayerId: 'actor',
+      claimedCharacter: character,
+      characterConsumedAtDeclaration: declResult.consumed,
+      declaredAt: Date.now(),
+    };
+
+    const isTruthful = actionDeclaration.characterConsumedAtDeclaration === true;
+    assert(isTruthful === true, `${action}: Challenge against truthful declaration evaluates to truthful`);
+    // Actor hand is NOT replaced a second time during challenge or final resolution
+
+    // 2. Bluffed declaration: Actor does NOT own the character card
+    const bluffedHands = {
+      actor: [
+        { id: 'card_dummy_1', character: 'ginner_badsha' as const },
+        { id: 'card_dummy_2', character: 'ginner_badsha' as const },
+      ],
+    };
+
+    const bluffDeclResult = consumeAndReplaceOnActionDeclaration(
+      bluffedHands,
+      drawDeck,
+      discardPile,
+      'actor',
+      character,
+      1
+    );
+
+    assert(bluffDeclResult.consumed === false, `${action}: Bluffed character must NOT be consumed`);
+    assert(bluffDeclResult.newActorHand.length === 2, `${action}: Bluffed actor hand size remains 2`);
+    assert(bluffDeclResult.newActorHand[0].id === 'card_dummy_1', `${action}: Bluffed actor hand contents unchanged`);
+
+    const bluffDeclaration = {
+      action,
+      actorPlayerId: 'actor',
+      claimedCharacter: character,
+      characterConsumedAtDeclaration: bluffDeclResult.consumed,
+      declaredAt: Date.now(),
+    };
+
+    const bluffIsTruthful = bluffDeclaration.characterConsumedAtDeclaration === true;
+    assert(bluffIsTruthful === false, `${action}: Challenge against bluffed declaration catches the bluff`);
+  }
+
+  console.log('✓ Test 25 Passed: Immediate character card consumption at declaration verified for all character actions');
 }
 
 console.log('--- ALL CHAKRANTO MULTIPLAYER SESSION RULES TESTS PASSED ---');

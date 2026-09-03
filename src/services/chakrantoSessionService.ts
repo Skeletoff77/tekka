@@ -27,7 +27,7 @@ import {
 import {
   assignInitialPositions,
   calculateChakrantoStandings,
-  consumeAndReplaceClaimedCardIfNeeded,
+  consumeAndReplaceOnActionDeclaration,
   dealInitialCards,
   drawReplacementCard,
   evaluateChallengeClaim,
@@ -183,6 +183,7 @@ export async function submitChakrantoAction(
     }
 
     const publicState = publicSnap.data() as ChakrantoPublicState;
+    const authState = authSnap.data() as ChakrantoAuthoritativeState;
     const now = new Date().toISOString();
 
     if (publicState.phase !== 'TURN_ACTIVE') {
@@ -286,6 +287,38 @@ export async function submitChakrantoAction(
     }
 
     // Normal Declaration (waiting for challenge, block, or pass)
+    let characterConsumedAtDeclaration = false;
+
+    if (claimedChar) {
+      const declRes = consumeAndReplaceOnActionDeclaration(
+        authState.playerHands,
+        authState.drawDeck,
+        authState.discardPile,
+        actingUid,
+        claimedChar,
+        publicState.turnNumber
+      );
+
+      if (declRes.consumed) {
+        characterConsumedAtDeclaration = true;
+
+        // Update Authoritative state with replaced card immediately
+        transaction.update(authRef, {
+          playerHands: declRes.newHands,
+          drawDeck: declRes.newDrawDeck,
+          discardPile: declRes.newDiscardPile,
+          updatedAt: now,
+        });
+
+        // Update Actor's private view with new replacement card immediately
+        const actorPrivRef = doc(db, 'rooms', roomId, 'chakrantoViews', actingUid);
+        transaction.update(actorPrivRef, {
+          activeCards: declRes.newActorHand,
+          updatedAt: now,
+        });
+      }
+    }
+
     const log: ChakrantoEventLog = {
       id: createLogId(),
       turnNumber: publicState.turnNumber,
@@ -310,6 +343,7 @@ export async function submitChakrantoAction(
     };
     if (claimedChar) {
       currentActionPayload.claimedCharacter = claimedChar;
+      currentActionPayload.characterConsumedAtDeclaration = characterConsumedAtDeclaration;
     }
     if (target?.id) {
       currentActionPayload.targetPlayerId = target.id;
@@ -405,50 +439,62 @@ export async function submitChakrantoChallenge(
     if (!defender) throw new Error('Challenged player not found.');
 
     const defenderHand = authState.playerHands[challengedUid] || [];
-    const evaluation = evaluateChallengeClaim(defenderHand, claimedCharacter!);
-
     const charMeta = CHAKRANTO_CHARACTERS[claimedCharacter!];
 
-    if (evaluation.isTruthful) {
+    let isTruthful = false;
+    if (context === 'ACTION') {
+      // For action claims, the actor possessed and consumed the card immediately at declaration
+      isTruthful = publicState.currentAction?.characterConsumedAtDeclaration === true;
+    } else {
+      // For block claims, evaluate defender's hand
+      const evaluation = evaluateChallengeClaim(defenderHand, claimedCharacter!);
+      isTruthful = evaluation.isTruthful;
+    }
+
+    if (isTruthful) {
       // DEFENDER IS TRUTHFUL!
       // Challenger loses challenge -> must sacrifice 1 card.
-      // Defender consumes claimed character and draws a replacement card.
-      const matchingCard = evaluation.matchingCard!;
-      const remainingDefenderHand = defenderHand.filter((c) => c.id !== matchingCard.id);
+      if (context === 'BLOCK') {
+        // Blocker proved truth -> blocker consumes claimed character and draws replacement
+        const matchingCard = defenderHand.find((c) => c.character === claimedCharacter!);
+        if (matchingCard) {
+          const remainingDefenderHand = defenderHand.filter((c) => c.id !== matchingCard.id);
+          const replacement = drawReplacementCard(
+            authState.drawDeck,
+            [...authState.discardPile, matchingCard],
+            authState.turnNumber
+          );
+          const newDefenderHand = [...remainingDefenderHand, replacement.card];
+          const updatedHands = {
+            ...authState.playerHands,
+            [challengedUid]: newDefenderHand,
+          };
 
-      const replacement = drawReplacementCard(
-        authState.drawDeck,
-        [...authState.discardPile, matchingCard],
-        authState.turnNumber
-      );
+          // Update Authoritative state with replaced card
+          transaction.update(authRef, {
+            playerHands: updatedHands,
+            drawDeck: replacement.newDrawDeck,
+            discardPile: replacement.newDiscardPile,
+            updatedAt: now,
+          });
 
-      const newDefenderHand = [...remainingDefenderHand, replacement.card];
-      const updatedHands = {
-        ...authState.playerHands,
-        [challengedUid]: newDefenderHand,
-      };
-
-      // Update Authoritative state with replaced card
-      transaction.update(authRef, {
-        playerHands: updatedHands,
-        drawDeck: replacement.newDrawDeck,
-        discardPile: replacement.newDiscardPile,
-        updatedAt: now,
-      });
-
-      // Update Defender's private view with the new card
-      const defenderPrivRef = doc(db, 'rooms', roomId, 'chakrantoViews', challengedUid);
-      transaction.update(defenderPrivRef, {
-        activeCards: newDefenderHand,
-        updatedAt: now,
-      });
+          // Update Defender's private view with the new card
+          const defenderPrivRef = doc(db, 'rooms', roomId, 'chakrantoViews', challengedUid);
+          transaction.update(defenderPrivRef, {
+            activeCards: newDefenderHand,
+            updatedAt: now,
+          });
+        }
+      }
+      // Note: If context === 'ACTION', defender ALREADY consumed and replaced their card
+      // immediately at action declaration! No second replacement occurs!
 
       const log: ChakrantoEventLog = {
         id: createLogId(),
         turnNumber: publicState.turnNumber,
         timestamp: now,
         type: 'CHALLENGE',
-        message: `${challenger.name} challenged ${defender.name}'s claim of ${charMeta.name}! ${defender.name} REVEALED ${charMeta.name} and proved truth! ${challenger.name} must sacrifice 1 card.`,
+        message: `${challenger.name} challenged ${defender.name}'s claim of ${charMeta.name}! ${defender.name} proved truth! ${challenger.name} must sacrifice 1 card.`,
         actorName: challenger.name,
         targetName: defender.name,
         character: claimedCharacter,
@@ -741,31 +787,6 @@ export async function submitChakrantoPass(
         actorName: actor.name,
       };
 
-      const replacementRes = consumeAndReplaceClaimedCardIfNeeded(
-        authState.playerHands,
-        authState.drawDeck,
-        authState.discardPile,
-        actorId,
-        'bir_bikrom',
-        publicState.currentAction.isClaimVerified,
-        publicState.turnNumber
-      );
-
-      if (replacementRes.replaced) {
-        transaction.update(authRef, {
-          playerHands: replacementRes.newHands,
-          drawDeck: replacementRes.newDrawDeck,
-          discardPile: replacementRes.newDiscardPile,
-          updatedAt: now,
-        });
-
-        const actorPrivRef = doc(db, 'rooms', roomId, 'chakrantoViews', actorId);
-        transaction.update(actorPrivRef, {
-          activeCards: replacementRes.newActorHand,
-          updatedAt: now,
-        });
-      }
-
       transaction.update(publicRef, {
         phase: 'TURN_ACTIVE',
         turnNumber: publicState.turnNumber + 1,
@@ -801,31 +822,6 @@ export async function submitChakrantoPass(
         targetName: target.name,
       };
 
-      const replacementRes = consumeAndReplaceClaimedCardIfNeeded(
-        authState.playerHands,
-        authState.drawDeck,
-        authState.discardPile,
-        actorId,
-        'kalu_dakat',
-        publicState.currentAction.isClaimVerified,
-        publicState.turnNumber
-      );
-
-      if (replacementRes.replaced) {
-        transaction.update(authRef, {
-          playerHands: replacementRes.newHands,
-          drawDeck: replacementRes.newDrawDeck,
-          discardPile: replacementRes.newDiscardPile,
-          updatedAt: now,
-        });
-
-        const actorPrivRef = doc(db, 'rooms', roomId, 'chakrantoViews', actorId);
-        transaction.update(actorPrivRef, {
-          activeCards: replacementRes.newActorHand,
-          updatedAt: now,
-        });
-      }
-
       transaction.update(publicRef, {
         phase: 'TURN_ACTIVE',
         turnNumber: publicState.turnNumber + 1,
@@ -853,31 +849,6 @@ export async function submitChakrantoPass(
         actorName: actor.name,
         targetName: target.name,
       };
-
-      const replacementRes = consumeAndReplaceClaimedCardIfNeeded(
-        authState.playerHands,
-        authState.drawDeck,
-        authState.discardPile,
-        actorId,
-        'brahmodoetto',
-        publicState.currentAction.isClaimVerified,
-        publicState.turnNumber
-      );
-
-      if (replacementRes.replaced) {
-        transaction.update(authRef, {
-          playerHands: replacementRes.newHands,
-          drawDeck: replacementRes.newDrawDeck,
-          discardPile: replacementRes.newDiscardPile,
-          updatedAt: now,
-        });
-
-        const actorPrivRef = doc(db, 'rooms', roomId, 'chakrantoViews', actorId);
-        transaction.update(actorPrivRef, {
-          activeCards: replacementRes.newActorHand,
-          updatedAt: now,
-        });
-      }
 
       transaction.update(publicRef, {
         phase: 'SACRIFICE_SELECTION',
@@ -1182,30 +1153,11 @@ export async function submitChakrantoSacrifice(
             return p;
           });
 
-          const replacementRes = consumeAndReplaceClaimedCardIfNeeded(
-            authState.playerHands,
-            authState.drawDeck,
-            authState.discardPile,
-            actorId,
-            'kalu_dakat',
-            currentAction.isClaimVerified,
-            publicState.turnNumber
-          );
-
-          if (replacementRes.replaced) {
-            transaction.update(authRef, {
-              playerHands: { ...replacementRes.newHands, [sacrificingUid]: newHand },
-              drawDeck: replacementRes.newDrawDeck,
-              discardPile: [...replacementRes.newDiscardPile, cardToSacrifice],
-              updatedAt: now,
-            });
-
-            const actorPrivRef = doc(db, 'rooms', roomId, 'chakrantoViews', actorId);
-            transaction.update(actorPrivRef, {
-              activeCards: replacementRes.newActorHand,
-              updatedAt: now,
-            });
-          }
+          transaction.update(authRef, {
+            playerHands: { ...authState.playerHands, [sacrificingUid]: newHand },
+            discardPile: [...authState.discardPile, cardToSacrifice],
+            updatedAt: now,
+          });
 
           const nextPlayer = getNextAlivePosition(publicState.currentPosition, playersWithCoins);
           const log: ChakrantoEventLog = {
@@ -1239,30 +1191,11 @@ export async function submitChakrantoSacrifice(
         if (action === 'ghar_motkano' && targetId) {
           const targetPlayer = updatedPlayers.find((p) => p.id === targetId);
 
-          const replacementRes = consumeAndReplaceClaimedCardIfNeeded(
-            authState.playerHands,
-            authState.drawDeck,
-            authState.discardPile,
-            actorId,
-            'brahmodoetto',
-            currentAction.isClaimVerified,
-            publicState.turnNumber
-          );
-
-          if (replacementRes.replaced) {
-            transaction.update(authRef, {
-              playerHands: { ...replacementRes.newHands, [sacrificingUid]: newHand },
-              drawDeck: replacementRes.newDrawDeck,
-              discardPile: [...replacementRes.newDiscardPile, cardToSacrifice],
-              updatedAt: now,
-            });
-
-            const actorPrivRef = doc(db, 'rooms', roomId, 'chakrantoViews', actorId);
-            transaction.update(actorPrivRef, {
-              activeCards: replacementRes.newActorHand,
-              updatedAt: now,
-            });
-          }
+          transaction.update(authRef, {
+            playerHands: { ...authState.playerHands, [sacrificingUid]: newHand },
+            discardPile: [...authState.discardPile, cardToSacrifice],
+            updatedAt: now,
+          });
 
           if (targetPlayer && !targetPlayer.isEliminated) {
             // Target is still alive -> Ghar Motkano requires target to sacrifice their next card!

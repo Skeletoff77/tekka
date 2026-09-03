@@ -38,7 +38,9 @@ import {
   UserManagementProfile,
 } from '../types/admin';
 import { RoomStatus, TekkaRoom } from '../types/room';
-import { purgeStalePresenceRecords } from './presenceService';
+import { PRESENCE_OFFLINE_THRESHOLD_MS, purgeStalePresenceRecords } from './presenceService';
+import { CANONICAL_GAME_IDS, normalizeGameId } from './analyticsTrackingService';
+export { CANONICAL_GAME_IDS, normalizeGameId };
 import {
   getKolkataDayBoundaries,
   getKolkataWeekBoundaries,
@@ -50,6 +52,165 @@ import {
 
 // Designated Super Admin Email Allowlist for initial secure bootstrap
 export const DESIGNATED_OWNER_EMAIL = 'jibeshsarkar77@gmail.com';
+
+/**
+ * Unified Authoritative Match Record representation across rooms and gameMatches.
+ */
+export interface UnifiedMatchData {
+  id: string;
+  roomId: string;
+  roomCode: string;
+  gameId: string; // CANONICAL: 'chor-police-dakat-babu' | 'chakranto'
+  gameName: string;
+  status: 'WAITING' | 'PLAYING' | 'FINISHED' | 'ABANDONED';
+  source: 'ROOM_ONLY' | 'MATCH_DOC_ONLY' | 'RECONCILED_BOTH';
+  sourceRecords?: {
+    hasRoomRecord: boolean;
+    hasMatchRecord: boolean;
+    roomStatus?: string;
+    matchStatus?: string;
+  };
+  startedAt?: string;
+  completedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  durationSeconds?: number;
+  playerCount: number;
+  players: { id: string; tekkaName: string }[];
+  winnerIds?: string[];
+  winnerNames?: string[];
+  scores?: { playerId: string; tekkaName: string; score: number; rank: number }[];
+  totalRounds?: number;
+  chakrantoStats?: GameMatchRecord['chakrantoStats'];
+}
+
+/**
+ * Authoritatively joins and deduplicates Firestore `rooms` and `gameMatches`
+ * into a single unified match collection. Prevents double-counting and reconciles state.
+ */
+export async function getAuthoritativeMatchesAndRooms(): Promise<{
+  unifiedMatches: UnifiedMatchData[];
+  rawRooms: TekkaRoom[];
+  rawMatches: GameMatchRecord[];
+}> {
+  const [roomsSnap, matchesSnap] = await Promise.all([
+    getDocs(collection(db, 'rooms')),
+    getDocs(collection(db, 'gameMatches')),
+  ]);
+
+  const rawRooms: TekkaRoom[] = [];
+  roomsSnap.forEach((d) => {
+    rawRooms.push({ ...(d.data() as TekkaRoom), id: d.id });
+  });
+
+  const rawMatches: GameMatchRecord[] = [];
+  matchesSnap.forEach((d) => {
+    rawMatches.push({ ...(d.data() as GameMatchRecord), id: d.id });
+  });
+
+  const matchMap = new Map<string, UnifiedMatchData>();
+
+  // 1. Populate from rooms
+  rawRooms.forEach((r) => {
+    const canonicalGameId = normalizeGameId(r.gameId);
+    let status: 'WAITING' | 'PLAYING' | 'FINISHED' | 'ABANDONED' = 'WAITING';
+    if (r.status === 'FINISHED') status = 'FINISHED';
+    else if (r.status === 'PLAYING') status = 'PLAYING';
+    else if (r.status === 'ABANDONED') status = 'ABANDONED';
+    else status = 'WAITING';
+
+    const defaultName = canonicalGameId === CANONICAL_GAME_IDS.CHAKRANTO
+      ? 'Chakranto (চক্রান্ত)'
+      : 'Chor Police Dakat Babu';
+
+    matchMap.set(r.id, {
+      id: r.id,
+      roomId: r.id,
+      roomCode: r.roomCode || r.id.substring(0, 6).toUpperCase(),
+      gameId: canonicalGameId,
+      gameName: r.gameName || defaultName,
+      status,
+      source: 'ROOM_ONLY',
+      sourceRecords: {
+        hasRoomRecord: true,
+        hasMatchRecord: false,
+        roomStatus: r.status,
+      },
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      playerCount: r.playerCount || r.players?.length || 0,
+      players: (r.players || []).map((p: any) => ({ id: p.id, tekkaName: p.tekkaName || 'Player' })),
+      totalRounds: r.totalRounds,
+    });
+  });
+
+  // 2. Authoritatively merge from gameMatches
+  rawMatches.forEach((m) => {
+    const key = m.roomId || m.id;
+    const existing = matchMap.get(key);
+    const canonicalGameId = normalizeGameId(m.gameId || existing?.gameId);
+
+    let status: 'WAITING' | 'PLAYING' | 'FINISHED' | 'ABANDONED' = 'PLAYING';
+    if (m.status === 'FINISHED' || existing?.status === 'FINISHED') {
+      status = 'FINISHED';
+    } else if (m.status === 'ABANDONED' || existing?.status === 'ABANDONED') {
+      status = 'ABANDONED';
+    } else if (m.status === 'PLAYING' || existing?.status === 'PLAYING') {
+      status = 'PLAYING';
+    } else if (existing?.status === 'WAITING') {
+      status = 'WAITING';
+    }
+
+    const durationSeconds = m.durationSeconds ?? existing?.durationSeconds;
+    const startedAt = m.startedAt || existing?.createdAt;
+    const completedAt = m.completedAt || (status === 'FINISHED' ? existing?.updatedAt : undefined);
+
+    const mergedPlayers = existing?.players && existing.players.length > 0
+      ? existing.players
+      : (m.playerIds || []).map((pId, idx) => ({
+          id: pId,
+          tekkaName: m.playerNames?.[idx] || 'Player',
+        }));
+
+    const defaultName = canonicalGameId === CANONICAL_GAME_IDS.CHAKRANTO
+      ? 'Chakranto (চক্রান্ত)'
+      : 'Chor Police Dakat Babu';
+
+    matchMap.set(key, {
+      id: key,
+      roomId: m.roomId || key,
+      roomCode: m.roomCode || existing?.roomCode || key.substring(0, 6).toUpperCase(),
+      gameId: canonicalGameId,
+      gameName: m.gameName || existing?.gameName || defaultName,
+      status,
+      source: existing ? 'RECONCILED_BOTH' : 'MATCH_DOC_ONLY',
+      sourceRecords: {
+        hasRoomRecord: !!existing,
+        hasMatchRecord: true,
+        roomStatus: existing?.sourceRecords?.roomStatus,
+        matchStatus: m.status,
+      },
+      startedAt,
+      completedAt,
+      createdAt: existing?.createdAt || m.startedAt,
+      updatedAt: m.updatedAt || existing?.updatedAt,
+      durationSeconds,
+      playerCount: m.playerCount || existing?.playerCount || mergedPlayers.length,
+      players: mergedPlayers,
+      winnerIds: m.winnerIds || existing?.winnerIds,
+      winnerNames: m.winnerNames || existing?.winnerNames,
+      scores: m.scores || existing?.scores,
+      totalRounds: m.roundsPlayed || m.totalRounds || existing?.totalRounds,
+      chakrantoStats: m.chakrantoStats || existing?.chakrantoStats,
+    });
+  });
+
+  return {
+    unifiedMatches: Array.from(matchMap.values()),
+    rawRooms,
+    rawMatches,
+  };
+}
 
 /**
  * Verifies if an authenticated Firebase User has authorized admin privileges.
@@ -120,7 +281,7 @@ export async function recordAuditLog(log: Omit<AdminAuditLog, 'id'>): Promise<vo
 
 /**
  * Fetches platform overview metrics for dashboard KPIs.
- * Accurately calculates metrics using Asia/Kolkata timezone boundaries.
+ * Accurately calculates metrics using Asia/Kolkata timezone boundaries from authoritative data models.
  */
 export async function getAdminOverviewStats(): Promise<AdminOverviewStats> {
   const now = Date.now();
@@ -180,39 +341,33 @@ export async function getAdminOverviewStats(): Promise<AdminOverviewStats> {
     // If uniqueVisitors query fails, fall back to today's active counts
   }
 
-  // 3. Fetch Rooms
-  const roomsSnap = await getDocs(collection(db, 'rooms'));
-  let totalRooms = 0;
-  let activeRooms = 0;
-  let currentlyPlayingGames = 0;
+  // 3. Fetch Authoritative Unified Matches & Rooms
+  const { unifiedMatches, rawRooms } = await getAuthoritativeMatchesAndRooms();
+  const totalRooms = rawRooms.length;
+  const activeRooms = rawRooms.filter(
+    (r) => r.status === 'WAITING' || r.status === 'STARTING' || r.status === 'PLAYING'
+  ).length;
+
   let completedGames = 0;
+  let currentlyPlayingGames = 0;
   let abandonedGames = 0;
   let gamesPlayedToday = 0;
   let gamesPlayedThisWeek = 0;
   let gamesPlayedThisMonth = 0;
 
-  roomsSnap.forEach((docSnap) => {
-    totalRooms++;
-    const rData = docSnap.data() as TekkaRoom;
-    const createdAt = rData.createdAt;
-
-    if (rData.status === 'WAITING' || rData.status === 'STARTING') {
-      activeRooms++;
-    } else if (rData.status === 'PLAYING') {
-      activeRooms++;
-      currentlyPlayingGames++;
-    } else if (rData.status === 'FINISHED') {
+  unifiedMatches.forEach((m) => {
+    if (m.status === 'FINISHED') {
       completedGames++;
-    } else if (rData.status === 'ABANDONED') {
-      abandonedGames++;
-    }
-
-    if (rData.status === 'PLAYING' || rData.status === 'FINISHED') {
-      if (createdAt) {
-        if (isTimestampInKolkataToday(createdAt)) gamesPlayedToday++;
-        if (isTimestampInKolkataThisWeek(createdAt)) gamesPlayedThisWeek++;
-        if (isTimestampInKolkataThisMonth(createdAt)) gamesPlayedThisMonth++;
+      const completionTime = m.completedAt || m.updatedAt || m.startedAt || m.createdAt;
+      if (completionTime) {
+        if (isTimestampInKolkataToday(completionTime)) gamesPlayedToday++;
+        if (isTimestampInKolkataThisWeek(completionTime)) gamesPlayedThisWeek++;
+        if (isTimestampInKolkataThisMonth(completionTime)) gamesPlayedThisMonth++;
       }
+    } else if (m.status === 'PLAYING') {
+      currentlyPlayingGames++;
+    } else if (m.status === 'ABANDONED') {
+      abandonedGames++;
     }
   });
 
@@ -229,8 +384,8 @@ export async function getAdminOverviewStats(): Promise<AdminOverviewStats> {
 
   presenceSnap.forEach((docSnap) => {
     const pData = docSnap.data();
-    // Valid heartbeat within 90 seconds
-    if (pData.lastHeartbeat && now - pData.lastHeartbeat <= 90_000) {
+    // Valid heartbeat within 90 seconds (PRESENCE_OFFLINE_THRESHOLD_MS)
+    if (pData.lastHeartbeat && now - pData.lastHeartbeat <= PRESENCE_OFFLINE_THRESHOLD_MS) {
       onlineSessions++;
 
       const visitorKey = pData.visitorId || pData.sessionId || docSnap.id;
@@ -411,7 +566,7 @@ export async function getAllRooms(filterStatus?: RoomStatus): Promise<TekkaRoom[
   const list: TekkaRoom[] = [];
 
   roomsSnap.forEach((docSnap) => {
-    const data = docSnap.data() as TekkaRoom;
+    const data = { ...(docSnap.data() as TekkaRoom), id: docSnap.id };
     if (!filterStatus || data.status === filterStatus) {
       list.push(data);
     }
@@ -475,167 +630,99 @@ export async function inspectRoomDetails(
 
 /**
  * Platform-wide game analytics for all registered games.
- * Authoritatively calculates real match durations, completion rates, and player counts from `gameMatches` and `rooms`.
+ * Authoritatively calculates real match durations, completion rates, and player counts from unified match data.
  */
 export async function getPlatformGameAnalytics(): Promise<GameAnalyticsData[]> {
-  const rooms = await getAllRooms();
-  const matchSnap = await getDocs(collection(db, 'gameMatches'));
-  const matches: GameMatchRecord[] = [];
-  matchSnap.forEach((mDoc) => {
-    matches.push(mDoc.data() as GameMatchRecord);
-  });
+  const { unifiedMatches } = await getAuthoritativeMatchesAndRooms();
 
-  // Registered game templates
-  const gameMap = new Map<string, GameAnalyticsData>();
+  const gamesConfig = [
+    {
+      id: CANONICAL_GAME_IDS.CHOR_POLICE,
+      name: 'Chor Police Dakat Babu',
+      defaultPlayers: 4,
+    },
+    {
+      id: CANONICAL_GAME_IDS.CHAKRANTO,
+      name: 'Chakranto (চক্রান্ত)',
+      defaultPlayers: 4,
+    },
+  ];
 
-  gameMap.set('tekka-chor-police-dakat-babu', {
-    gameId: 'tekka-chor-police-dakat-babu',
-    gameName: 'Chor Police Dakat Babu',
-    totalStarted: 0,
-    totalCompleted: 0,
-    currentlyRunning: 0,
-    abandoned: 0,
-    completionRate: 0,
-    avgDurationMinutes: 0,
-    avgPlayers: 4.0,
-    playedToday: 0,
-    playedThisWeek: 0,
-    playedThisMonth: 0,
-  });
+  return gamesConfig.map((cfg) => {
+    const gameMatches = unifiedMatches.filter((m) => m.gameId === cfg.id);
+    let totalStarted = 0;
+    let totalCompleted = 0;
+    let currentlyRunning = 0;
+    let abandoned = 0;
+    let playedToday = 0;
+    let playedThisWeek = 0;
+    let playedThisMonth = 0;
+    const durations: number[] = [];
+    const playerCounts: number[] = [];
 
-  gameMap.set('tekka-chakranto', {
-    gameId: 'tekka-chakranto',
-    gameName: 'Chakranto (চক্রান্ত)',
-    totalStarted: 0,
-    totalCompleted: 0,
-    currentlyRunning: 0,
-    abandoned: 0,
-    completionRate: 0,
-    avgDurationMinutes: 0,
-    avgPlayers: 0,
-    playedToday: 0,
-    playedThisWeek: 0,
-    playedThisMonth: 0,
-  });
+    gameMatches.forEach((m) => {
+      if (m.status === 'PLAYING') {
+        totalStarted++;
+        currentlyRunning++;
+        if (m.playerCount) playerCounts.push(m.playerCount);
+      } else if (m.status === 'FINISHED') {
+        totalStarted++;
+        totalCompleted++;
+        if (m.playerCount) playerCounts.push(m.playerCount);
+        if (m.durationSeconds) durations.push(m.durationSeconds / 60);
 
-  // Track durations and player totals
-  const gameDurations: Record<string, number[]> = {};
-  const gamePlayerCounts: Record<string, number[]> = {};
-
-  // Process rooms
-  rooms.forEach((r) => {
-    const gId = r.gameId || 'tekka-chor-police-dakat-babu';
-    let g = gameMap.get(gId);
-    if (!g) {
-      g = {
-        gameId: gId,
-        gameName: r.gameName || gId,
-        totalStarted: 0,
-        totalCompleted: 0,
-        currentlyRunning: 0,
-        abandoned: 0,
-        completionRate: 0,
-        avgDurationMinutes: 0,
-        avgPlayers: 0,
-        playedToday: 0,
-        playedThisWeek: 0,
-        playedThisMonth: 0,
-      };
-      gameMap.set(gId, g);
-    }
-
-    const created = r.createdAt;
-
-    if (r.status === 'PLAYING') {
-      g.totalStarted++;
-      g.currentlyRunning++;
-      if (created) {
-        if (isTimestampInKolkataToday(created)) g.playedToday++;
-        if (isTimestampInKolkataThisWeek(created)) g.playedThisWeek++;
-        if (isTimestampInKolkataThisMonth(created)) g.playedThisMonth++;
+        const completionTime = m.completedAt || m.updatedAt || m.startedAt || m.createdAt;
+        if (completionTime) {
+          if (isTimestampInKolkataToday(completionTime)) playedToday++;
+          if (isTimestampInKolkataThisWeek(completionTime)) playedThisWeek++;
+          if (isTimestampInKolkataThisMonth(completionTime)) playedThisMonth++;
+        }
+      } else if (m.status === 'ABANDONED') {
+        abandoned++;
+        totalStarted++; // ABANDONED matches are started game sessions that were abandoned
       }
-    } else if (r.status === 'FINISHED') {
-      g.totalStarted++;
-      g.totalCompleted++;
-      if (created) {
-        if (isTimestampInKolkataToday(created)) g.playedToday++;
-        if (isTimestampInKolkataThisWeek(created)) g.playedThisWeek++;
-        if (isTimestampInKolkataThisMonth(created)) g.playedThisMonth++;
-      }
-    } else if (r.status === 'ABANDONED') {
-      g.abandoned++;
-    }
+    });
 
-    if (r.playerCount && (r.status === 'PLAYING' || r.status === 'FINISHED')) {
-      if (!gamePlayerCounts[gId]) gamePlayerCounts[gId] = [];
-      gamePlayerCounts[gId].push(r.playerCount);
-    }
+    const completionRate = totalStarted > 0 ? Math.round((totalCompleted / totalStarted) * 100) : 0;
+    const avgDurationMinutes = durations.length > 0
+      ? Number((durations.reduce((sum, d) => sum + d, 0) / durations.length).toFixed(1))
+      : 0;
+    const avgPlayers = playerCounts.length > 0
+      ? Number((playerCounts.reduce((sum, p) => sum + p, 0) / playerCounts.length).toFixed(1))
+      : cfg.defaultPlayers;
+
+    return {
+      gameId: cfg.id,
+      gameName: cfg.name,
+      totalStarted,
+      totalMatches: totalStarted,
+      totalCompleted,
+      currentlyRunning,
+      abandoned,
+      completionRate,
+      avgDurationMinutes,
+      avgPlayers,
+      playedToday,
+      playedThisWeek,
+      playedThisMonth,
+    };
   });
-
-  // Process gameMatches for precise duration
-  matches.forEach((m) => {
-    const gId = m.gameId || 'tekka-chor-police-dakat-babu';
-    if (m.durationSeconds && m.status === 'FINISHED') {
-      if (!gameDurations[gId]) gameDurations[gId] = [];
-      gameDurations[gId].push(m.durationSeconds / 60);
-    }
-    if (m.playerCount) {
-      if (!gamePlayerCounts[gId]) gamePlayerCounts[gId] = [];
-      gamePlayerCounts[gId].push(m.playerCount);
-    }
-  });
-
-  // Calculate final averages & completion rates
-  const result: GameAnalyticsData[] = [];
-  gameMap.forEach((g, gId) => {
-    g.completionRate = g.totalStarted > 0 ? Math.round((g.totalCompleted / g.totalStarted) * 100) : 0;
-
-    const durations = gameDurations[gId];
-    if (durations && durations.length > 0) {
-      const avg = durations.reduce((sum, d) => sum + d, 0) / durations.length;
-      g.avgDurationMinutes = Number(avg.toFixed(1));
-    } else {
-      g.avgDurationMinutes = 0;
-    }
-
-    const playerCounts = gamePlayerCounts[gId];
-    if (playerCounts && playerCounts.length > 0) {
-      const avgP = playerCounts.reduce((sum, p) => sum + p, 0) / playerCounts.length;
-      g.avgPlayers = Number(avgP.toFixed(1));
-    } else if (gId === 'tekka-chor-police-dakat-babu') {
-      g.avgPlayers = 4.0;
-    }
-
-    result.push(g);
-  });
-
-  return result;
 }
 
 /**
  * Deep-dive game analytics specifically for Chor Police Dakat Babu.
- * Calculates strictly authoritatively from real match records and scores without fabricated placeholders.
+ * Calculates strictly authoritatively from unified match records and scores without fabricated placeholders.
  */
 export async function getChorPoliceAnalytics(): Promise<ChorPoliceAnalyticsData> {
-  const rooms = await getAllRooms();
-  const cpRooms = rooms.filter(
-    (r) => r.gameId === 'tekka-chor-police-dakat-babu' || r.gameId === 'chor-police-dakat-babu'
-  );
+  const { unifiedMatches } = await getAuthoritativeMatchesAndRooms();
+  const cpMatches = unifiedMatches.filter((m) => m.gameId === CANONICAL_GAME_IDS.CHOR_POLICE);
 
-  const matchSnap = await getDocs(collection(db, 'gameMatches'));
-  const cpMatches: GameMatchRecord[] = [];
-  matchSnap.forEach((mDoc) => {
-    const data = mDoc.data() as GameMatchRecord;
-    if (data.gameId === 'tekka-chor-police-dakat-babu' || data.gameId === 'chor-police-dakat-babu') {
-      cpMatches.push(data);
-    }
-  });
-
+  let totalMatches = 0;
   let completedMatches = 0;
   let abandonedMatches = 0;
   let currentlyRunning = 0;
-  let totalMatches = 0;
   let totalRoundsPlayed = 0;
+
   let highestScoreRecord: { score: number; tekkaName: string; date: string } | null = null;
   let totalScoresSum = 0;
   let totalScoresCount = 0;
@@ -643,39 +730,40 @@ export async function getChorPoliceAnalytics(): Promise<ChorPoliceAnalyticsData>
   const roundCounts: Record<number, number> = { 5: 0, 10: 0, 15: 0, 20: 0 };
   const matchDurations: number[] = [];
 
-  for (const r of cpRooms) {
-    totalMatches++;
-    if (r.status === 'PLAYING') {
+  cpMatches.forEach((m) => {
+    if (m.status === 'PLAYING') {
+      totalMatches++;
       currentlyRunning++;
-    } else if (r.status === 'FINISHED') {
+    } else if (m.status === 'FINISHED') {
+      totalMatches++;
       completedMatches++;
-      const rounds = r.totalRounds || 5;
+      const rounds = m.totalRounds || 5;
       roundCounts[rounds] = (roundCounts[rounds] || 0) + 1;
       totalRoundsPlayed += rounds;
-    } else if (r.status === 'ABANDONED') {
+      if (m.durationSeconds) {
+        matchDurations.push(m.durationSeconds / 60);
+      }
+    } else if (m.status === 'ABANDONED') {
+      totalMatches++;
       abandonedMatches++;
     }
 
-    // Register player match participation
-    if (r.players && Array.isArray(r.players)) {
-      r.players.forEach((p) => {
+    // Register player match participation only for actual matches (PLAYING, FINISHED, ABANDONED)
+    if (m.status === 'PLAYING' || m.status === 'FINISHED' || m.status === 'ABANDONED') {
+      m.players.forEach((p) => {
         if (!playerWins[p.id]) {
           playerWins[p.id] = { tekkaName: p.tekkaName || 'Player', wins: 0, matches: 0 };
         }
         playerWins[p.id].matches++;
       });
     }
-  }
 
-  // Process gameMatches for real winner counts, highest scores, and match durations
-  for (const m of cpMatches) {
-    if (m.durationSeconds && m.status === 'FINISHED') {
-      matchDurations.push(m.durationSeconds / 60);
-    }
-
-    if (m.winnerIds && m.winnerNames) {
-      m.winnerIds.forEach((wId, idx) => {
-        const wName = m.winnerNames?.[idx] || 'Player';
+    // Register winners - deduplicate winnerIds to guarantee at most ONE win per player per match
+    if (m.status === 'FINISHED' && m.winnerIds && Array.isArray(m.winnerIds)) {
+      const uniqueWinnerIds = Array.from(new Set(m.winnerIds));
+      uniqueWinnerIds.forEach((wId) => {
+        const winnerIndex = m.winnerIds?.indexOf(wId) ?? -1;
+        const wName = (winnerIndex >= 0 ? m.winnerNames?.[winnerIndex] : undefined) || playerWins[wId]?.tekkaName || 'Player';
         if (!playerWins[wId]) {
           playerWins[wId] = { tekkaName: wName, wins: 0, matches: 0 };
         }
@@ -683,6 +771,7 @@ export async function getChorPoliceAnalytics(): Promise<ChorPoliceAnalyticsData>
       });
     }
 
+    // Register scores
     if (m.scores && Array.isArray(m.scores)) {
       m.scores.forEach((s) => {
         totalScoresSum += s.score;
@@ -696,9 +785,8 @@ export async function getChorPoliceAnalytics(): Promise<ChorPoliceAnalyticsData>
         }
       });
     }
-  }
+  });
 
-  // Find most common winner
   let topWinner: { tekkaName: string; wins: number } | null = null;
   let maxWins = 0;
   const winList = Object.entries(playerWins).map(([playerId, val]) => {
@@ -744,29 +832,21 @@ export async function getChorPoliceAnalytics(): Promise<ChorPoliceAnalyticsData>
 
 /**
  * Deep-dive game analytics specifically for Chakranto.
- * Authoritative statistics computed directly from Firestore `gameMatches` with gameId = 'tekka-chakranto'.
+ * Authoritative statistics computed directly from unified matches and `chakrantoStats`.
  */
 export async function getChakrantoAnalytics(): Promise<ChakrantoAnalyticsData> {
-  const rooms = await getAllRooms();
-  const chRooms = rooms.filter((r) => r.gameId === 'tekka-chakranto');
+  const { unifiedMatches } = await getAuthoritativeMatchesAndRooms();
+  const chMatches = unifiedMatches.filter((m) => m.gameId === CANONICAL_GAME_IDS.CHAKRANTO);
 
-  const matchSnap = await getDocs(collection(db, 'gameMatches'));
-  const chMatches: GameMatchRecord[] = [];
-  matchSnap.forEach((mDoc) => {
-    const data = mDoc.data() as GameMatchRecord;
-    if (data.gameId === 'tekka-chakranto') {
-      chMatches.push(data);
-    }
-  });
-
+  let totalMatches = 0;
   let completedMatches = 0;
   let abandonedMatches = 0;
   let currentlyRunning = 0;
-  let totalMatches = 0;
-  let totalPlayers = 0;
-  const playerCounts: number[] = [];
-  const matchDurations: number[] = [];
   let totalEliminations = 0;
+
+  const playerWins: Record<string, { tekkaName: string; wins: number; matches: number }> = {};
+  const matchDurations: number[] = [];
+  const playerCounts: number[] = [];
 
   const actionStats = {
     ayyAttempted: 0,
@@ -804,39 +884,38 @@ export async function getChakrantoAnalytics(): Promise<ChakrantoAnalyticsData> {
   };
 
   let totalCardsSacrificed = 0;
-  const playerWins: Record<string, { tekkaName: string; wins: number; matches: number }> = {};
 
-  // Process rooms
-  for (const r of chRooms) {
-    totalMatches++;
-    if (r.status === 'PLAYING') currentlyRunning++;
-    else if (r.status === 'FINISHED') completedMatches++;
-    else if (r.status === 'ABANDONED') abandonedMatches++;
-
-    if (r.playerCount) {
-      totalPlayers += r.playerCount;
-      playerCounts.push(r.playerCount);
+  chMatches.forEach((m) => {
+    if (m.status === 'PLAYING') {
+      totalMatches++;
+      currentlyRunning++;
+      if (m.playerCount) playerCounts.push(m.playerCount);
+    } else if (m.status === 'FINISHED') {
+      totalMatches++;
+      completedMatches++;
+      if (m.playerCount) playerCounts.push(m.playerCount);
+      if (m.durationSeconds) matchDurations.push(m.durationSeconds / 60);
+    } else if (m.status === 'ABANDONED') {
+      totalMatches++;
+      abandonedMatches++;
     }
 
-    if (r.players && Array.isArray(r.players)) {
-      r.players.forEach((p) => {
+    // Register player match participation only for actual matches (PLAYING, FINISHED, ABANDONED)
+    if (m.status === 'PLAYING' || m.status === 'FINISHED' || m.status === 'ABANDONED') {
+      m.players.forEach((p) => {
         if (!playerWins[p.id]) {
           playerWins[p.id] = { tekkaName: p.tekkaName || 'Player', wins: 0, matches: 0 };
         }
         playerWins[p.id].matches++;
       });
     }
-  }
 
-  // Process match records
-  for (const m of chMatches) {
-    if (m.durationSeconds && m.status === 'FINISHED') {
-      matchDurations.push(m.durationSeconds / 60);
-    }
-
-    if (m.winnerIds && m.winnerNames) {
-      m.winnerIds.forEach((wId, idx) => {
-        const wName = m.winnerNames?.[idx] || 'Player';
+    // Register winners - deduplicate winnerIds to guarantee at most ONE win per player per match
+    if (m.status === 'FINISHED' && m.winnerIds && Array.isArray(m.winnerIds)) {
+      const uniqueWinnerIds = Array.from(new Set(m.winnerIds));
+      uniqueWinnerIds.forEach((wId) => {
+        const winnerIndex = m.winnerIds?.indexOf(wId) ?? -1;
+        const wName = (winnerIndex >= 0 ? m.winnerNames?.[winnerIndex] : undefined) || playerWins[wId]?.tekkaName || 'Player';
         if (!playerWins[wId]) {
           playerWins[wId] = { tekkaName: wName, wins: 0, matches: 0 };
         }
@@ -844,6 +923,7 @@ export async function getChakrantoAnalytics(): Promise<ChakrantoAnalyticsData> {
       });
     }
 
+    // Accumulate telemetry stats
     if (m.chakrantoStats) {
       const s = m.chakrantoStats;
       totalEliminations += s.eliminations || 0;
@@ -882,11 +962,12 @@ export async function getChakrantoAnalytics(): Promise<ChakrantoAnalyticsData> {
       coinEconomy.totalCoinsStolen += s.coinsStolen || 0;
       coinEconomy.totalCoinsSpent += s.coinsSpent || 0;
     }
-  }
+  });
 
+  const totalPlayersInMatches = playerCounts.reduce((sum, p) => sum + p, 0);
   const avgPlayers = playerCounts.length > 0
-    ? Number((playerCounts.reduce((sum, p) => sum + p, 0) / playerCounts.length).toFixed(1))
-    : 0;
+    ? Number((totalPlayersInMatches / playerCounts.length).toFixed(1))
+    : 4.0;
 
   const avgDuration = matchDurations.length > 0
     ? Number((matchDurations.reduce((sum, d) => sum + d, 0) / matchDurations.length).toFixed(1))
@@ -911,7 +992,7 @@ export async function getChakrantoAnalytics(): Promise<ChakrantoAnalyticsData> {
     completedMatches,
     abandonedMatches,
     currentlyRunning,
-    totalPlayers,
+    totalPlayers: totalPlayersInMatches,
     avgPlayers,
     avgDurationMinutes: avgDuration,
     totalEliminations,

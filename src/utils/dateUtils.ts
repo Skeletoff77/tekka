@@ -97,8 +97,13 @@ export function getKolkataMonthBoundaries(dateInput: number | string | Date = ne
 
 /**
  * Helper to check if a timestamp falls within Kolkata "Today".
+ * Supports epoch ms, ISO date string, or YYYY-MM-DD date string.
  */
 export function isTimestampInKolkataToday(timestamp: number | string): boolean {
+  if (typeof timestamp === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(timestamp.trim())) {
+    const { dateStr } = getKolkataDayBoundaries();
+    return timestamp.trim() === dateStr;
+  }
   const timeMs = typeof timestamp === 'string' ? new Date(timestamp).getTime() : timestamp;
   if (isNaN(timeMs)) return false;
   const { startOfDayMs, endOfDayMs } = getKolkataDayBoundaries();
@@ -106,23 +111,34 @@ export function isTimestampInKolkataToday(timestamp: number | string): boolean {
 }
 
 /**
- * Helper to check if a timestamp falls within Kolkata "This Week" (since Monday 00:00 IST).
+ * Helper to check if a timestamp falls within Kolkata "This Week" (since Monday 00:00 IST to Sunday 23:59:59 IST).
+ * Supports epoch ms, ISO date string, or YYYY-MM-DD date string.
  */
 export function isTimestampInKolkataThisWeek(timestamp: number | string): boolean {
-  const timeMs = typeof timestamp === 'string' ? new Date(timestamp).getTime() : timestamp;
+  let timeMs: number;
+  if (typeof timestamp === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(timestamp.trim())) {
+    timeMs = new Date(`${timestamp.trim()}T12:00:00Z`).getTime();
+  } else {
+    timeMs = typeof timestamp === 'string' ? new Date(timestamp).getTime() : timestamp;
+  }
   if (isNaN(timeMs)) return false;
-  const { startOfWeekMs } = getKolkataWeekBoundaries();
-  return timeMs >= startOfWeekMs;
+  const { startOfWeekMs, endOfWeekMs } = getKolkataWeekBoundaries();
+  return timeMs >= startOfWeekMs && timeMs <= endOfWeekMs;
 }
 
 /**
- * Helper to check if a timestamp falls within Kolkata "This Month" (since 1st of month 00:00 IST).
+ * Helper to check if a timestamp falls within Kolkata "This Month" (since 1st of month 00:00 IST to end of month 23:59:59 IST).
+ * Supports epoch ms, ISO date string, or YYYY-MM-DD date string.
  */
 export function isTimestampInKolkataThisMonth(timestamp: number | string): boolean {
+  if (typeof timestamp === 'string' && /^\d{4}-\d{2}/.test(timestamp.trim())) {
+    const { monthStr } = getKolkataMonthBoundaries();
+    return timestamp.trim().startsWith(monthStr);
+  }
   const timeMs = typeof timestamp === 'string' ? new Date(timestamp).getTime() : timestamp;
   if (isNaN(timeMs)) return false;
-  const { startOfMonthMs } = getKolkataMonthBoundaries();
-  return timeMs >= startOfMonthMs;
+  const { startOfMonthMs, endOfMonthMs } = getKolkataMonthBoundaries();
+  return timeMs >= startOfMonthMs && timeMs <= endOfMonthMs;
 }
 
 /**

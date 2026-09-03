@@ -12,6 +12,69 @@ import { db } from '../lib/firebase';
 import { GameMatchRecord } from '../types/admin';
 
 /**
+ * Authoritative Canonical Game Identifiers across all systems.
+ */
+export const CANONICAL_GAME_IDS = {
+  CHAKRANTO: 'chakranto',
+  CHOR_POLICE: 'chor-police-dakat-babu',
+} as const;
+
+/**
+ * Normalizes any legacy or variant gameId to its single canonical identifier.
+ */
+export function normalizeGameId(rawGameId?: string | null): string {
+  if (!rawGameId) return CANONICAL_GAME_IDS.CHOR_POLICE;
+  const lower = rawGameId.toLowerCase().trim();
+  if (lower.includes('chakranto')) {
+    return CANONICAL_GAME_IDS.CHAKRANTO;
+  }
+  if (lower.includes('chor') || lower.includes('police') || lower.includes('dakat')) {
+    return CANONICAL_GAME_IDS.CHOR_POLICE;
+  }
+  return rawGameId;
+}
+
+/**
+ * Default clean Chakranto stats structure.
+ */
+export function createDefaultChakrantoStats(): NonNullable<GameMatchRecord['chakrantoStats']> {
+  return {
+    totalTurns: 0,
+    eliminations: 0,
+    actions: {
+      ayyAttempted: 0,
+      ayyResolved: 0,
+      roptaniAttempted: 0,
+      roptaniResolved: 0,
+      birbikromAttempted: 0,
+      birbikromResolved: 0,
+      dakatiAttempted: 0,
+      dakatiResolved: 0,
+      gharMotkanoAttempted: 0,
+      gharMotkanoResolved: 0,
+      shadhbodolAttempted: 0,
+      shadhbodolResolved: 0,
+      hottayaAttempted: 0,
+      hottayaResolved: 0,
+    },
+    challenges: {
+      total: 0,
+      successful: 0,
+      failed: 0,
+    },
+    blocks: {
+      total: 0,
+      successful: 0,
+      failed: 0,
+    },
+    coinsGenerated: 0,
+    coinsStolen: 0,
+    coinsSpent: 0,
+    cardsSacrificed: 0,
+  };
+}
+
+/**
  * Records the authoritative start of a multiplayer game match.
  */
 export async function trackMatchStart(params: {
@@ -23,6 +86,7 @@ export async function trackMatchStart(params: {
   totalRounds?: number;
 }): Promise<void> {
   try {
+    const canonicalGameId = normalizeGameId(params.gameId);
     const matchRef = doc(db, 'gameMatches', params.roomId);
     const existingSnap = await getDoc(matchRef);
 
@@ -30,6 +94,7 @@ export async function trackMatchStart(params: {
       // Already recorded start; ensure status is PLAYING
       await updateDoc(matchRef, {
         status: 'PLAYING',
+        gameId: canonicalGameId,
         updatedAt: new Date().toISOString(),
       });
       return;
@@ -40,7 +105,7 @@ export async function trackMatchStart(params: {
       id: params.roomId,
       roomId: params.roomId,
       roomCode: params.roomCode,
-      gameId: params.gameId,
+      gameId: canonicalGameId,
       gameName: params.gameName,
       status: 'PLAYING',
       startedAt: now,
@@ -48,40 +113,7 @@ export async function trackMatchStart(params: {
       playerIds: params.players.map((p) => p.id),
       playerNames: params.players.map((p) => p.tekkaName),
       totalRounds: params.totalRounds,
-      chakrantoStats: params.gameId === 'tekka-chakranto' ? {
-        totalTurns: 0,
-        eliminations: 0,
-        actions: {
-          ayyAttempted: 0,
-          ayyResolved: 0,
-          roptaniAttempted: 0,
-          roptaniResolved: 0,
-          birbikromAttempted: 0,
-          birbikromResolved: 0,
-          dakatiAttempted: 0,
-          dakatiResolved: 0,
-          gharMotkanoAttempted: 0,
-          gharMotkanoResolved: 0,
-          shadhbodolAttempted: 0,
-          shadhbodolResolved: 0,
-          hottayaAttempted: 0,
-          hottayaResolved: 0,
-        },
-        challenges: {
-          total: 0,
-          successful: 0,
-          failed: 0,
-        },
-        blocks: {
-          total: 0,
-          successful: 0,
-          failed: 0,
-        },
-        coinsGenerated: 0,
-        coinsStolen: 0,
-        coinsSpent: 0,
-        cardsSacrificed: 0,
-      } : undefined,
+      chakrantoStats: canonicalGameId === CANONICAL_GAME_IDS.CHAKRANTO ? createDefaultChakrantoStats() : undefined,
       updatedAt: now,
     };
 
@@ -182,6 +214,21 @@ export async function trackChakrantoMatchFinish(params: {
 }
 
 /**
+ * Ensures chakrantoStats structure exists on the match record before applying increments.
+ */
+async function ensureChakrantoStats(matchRef: any): Promise<void> {
+  try {
+    const snap = await getDoc(matchRef);
+    if (snap.exists()) {
+      const data = snap.data() as GameMatchRecord;
+      if (!data.chakrantoStats) {
+        await setDoc(matchRef, { chakrantoStats: createDefaultChakrantoStats() }, { merge: true });
+      }
+    }
+  } catch {}
+}
+
+/**
  * Tracks an attempted action declaration in Chakranto.
  */
 export async function trackChakrantoActionAttempt(params: {
@@ -191,6 +238,8 @@ export async function trackChakrantoActionAttempt(params: {
 }): Promise<void> {
   try {
     const matchRef = doc(db, 'gameMatches', params.roomId);
+    await ensureChakrantoStats(matchRef);
+
     const actionKeyMap: Record<string, string> = {
       ayy: 'chakrantoStats.actions.ayyAttempted',
       roptani: 'chakrantoStats.actions.roptaniAttempted',
@@ -232,6 +281,8 @@ export async function trackChakrantoActionResolved(params: {
 }): Promise<void> {
   try {
     const matchRef = doc(db, 'gameMatches', params.roomId);
+    await ensureChakrantoStats(matchRef);
+
     const actionKeyMap: Record<string, string> = {
       ayy: 'chakrantoStats.actions.ayyResolved',
       roptani: 'chakrantoStats.actions.roptaniResolved',
@@ -275,6 +326,8 @@ export async function trackChakrantoChallenge(params: {
 }): Promise<void> {
   try {
     const matchRef = doc(db, 'gameMatches', params.roomId);
+    await ensureChakrantoStats(matchRef);
+
     await updateDoc(matchRef, {
       'chakrantoStats.challenges.total': increment(1),
       [params.challengerWon
@@ -296,6 +349,8 @@ export async function trackChakrantoBlock(params: {
 }): Promise<void> {
   try {
     const matchRef = doc(db, 'gameMatches', params.roomId);
+    await ensureChakrantoStats(matchRef);
+
     await updateDoc(matchRef, {
       'chakrantoStats.blocks.total': increment(1),
       [params.successful
@@ -317,6 +372,8 @@ export async function trackChakrantoSacrifice(params: {
 }): Promise<void> {
   try {
     const matchRef = doc(db, 'gameMatches', params.roomId);
+    await ensureChakrantoStats(matchRef);
+
     const updatePayload: Record<string, any> = {
       'chakrantoStats.cardsSacrificed': increment(1),
       updatedAt: new Date().toISOString(),

@@ -132,7 +132,7 @@ export async function claimTekkaName(
         memberTier: userData.memberTier || 'Early Access Member',
         bio: userData.bio || 'Tactical strategist on the TEKKA gaming network.',
         country: userData.country || 'Global',
-        wishlistedGameIds: Array.isArray(userData.wishlistedGameIds) ? userData.wishlistedGameIds : ['tekka-chor-police-dakat-babu'],
+        wishlistedGameIds: Array.isArray(userData.wishlistedGameIds) ? userData.wishlistedGameIds : ['chor-police-dakat-babu'],
         preferences: userData.preferences || {
           emailNotifications: true,
           soundEffects: true,

@@ -25,6 +25,31 @@ export const GameAnalyticsTab: React.FC<GameAnalyticsTabProps> = ({
   onSelectChorPolice,
   onSelectChakranto,
 }) => {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-[#E50914] border-t-transparent animate-spin" />
+          <span className="text-xs font-mono-code text-zinc-500">
+            Calculating Authoritative Catalog Throughput...
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (analytics.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
+        <AlertCircle className="w-8 h-8 text-amber-500" />
+        <span className="text-sm font-bold text-white">No Catalog Analytics Available</span>
+        <p className="text-xs text-zinc-400 font-mono-code max-w-md">
+          No registered matches were found across authoritative rooms or gameMatches collections.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}

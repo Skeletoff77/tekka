@@ -13,6 +13,7 @@ import {
   drawReplacementCard,
   calculateChakrantoStandings,
   consumeAndReplaceClaimedCardIfNeeded,
+  consumeAndReplaceOnActionDeclaration,
   getChakrantoPlayerInstruction,
   ALL_CHARACTERS,
   COPIES_PER_CHARACTER,
@@ -206,6 +207,48 @@ const replaceRes3 = consumeAndReplaceClaimedCardIfNeeded(
   1
 );
 assert(replaceRes3.replaced === false, 'Already verified claim is not replaced a second time');
+
+// Test consumeAndReplaceOnActionDeclaration: Immediate consumption at declaration
+const declHands = {
+  u1: [
+    { id: 'kalu_dakat_1', character: 'kalu_dakat' as const },
+    { id: 'brahmodoetto_1', character: 'brahmodoetto' as const },
+  ],
+  u2: [
+    { id: 'petukchondro_1', character: 'petukchondro' as const },
+  ],
+};
+const declDeck = [{ id: 'bir_bikrom_1', character: 'bir_bikrom' as const }];
+const declDiscard: any[] = [];
+
+// Owned character declared -> immediately consumed and replaced
+const declRes1 = consumeAndReplaceOnActionDeclaration(
+  declHands,
+  declDeck,
+  declDiscard,
+  'u1',
+  'kalu_dakat',
+  1
+);
+assert(declRes1.consumed === true, 'Owned Kalu Dakat must be consumed immediately at declaration');
+assert(declRes1.newActorHand.length === 2, 'Hand length must remain 2');
+assert(!declRes1.newActorHand.some((c) => c.id === 'kalu_dakat_1'), 'Original Kalu Dakat card must be removed');
+assert(declRes1.newActorHand.some((c) => c.id === 'bir_bikrom_1'), 'Replacement card drawn immediately');
+assert(declRes1.newDiscardPile.some((c) => c.id === 'kalu_dakat_1'), 'Consumed card moved to discard pile');
+
+// Bluffed character declared -> NOT consumed or replaced
+const declRes2 = consumeAndReplaceOnActionDeclaration(
+  declHands,
+  declDeck,
+  declDiscard,
+  'u1',
+  'ginner_badsha',
+  1
+);
+assert(declRes2.consumed === false, 'Bluffed character not owned must not be consumed');
+assert(declRes2.newActorHand.length === 2, 'Hand length stays unchanged');
+assert(declRes2.newActorHand[0].id === 'kalu_dakat_1', 'Hand contents remain unchanged');
+
 console.log('✓ Character card consumption and replacement logic verified');
 
 // 10. Test Player Instruction & Actionable Visibility

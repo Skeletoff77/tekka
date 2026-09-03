@@ -24,6 +24,7 @@ export const LivePresenceTab: React.FC<LivePresenceTabProps> = ({ adminUser }) =
   const [presenceList, setPresenceList] = useState<LivePresence[]>([]);
   const [breakdown, setBreakdown] = useState({
     totalVisitors: 0,
+    registeredGamers: 0,
     anonymousVisitors: 0,
     authenticatedUsers: 0,
     usersInRooms: 0,
@@ -101,8 +102,10 @@ export const LivePresenceTab: React.FC<LivePresenceTabProps> = ({ adminUser }) =
         <div className="p-4 rounded-xl bg-[#0C0C0C] border border-[#1E1E1E]">
           <span className="text-xs font-mono-code text-zinc-500 block">Authenticated Gamers</span>
           <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-2xl font-bold text-blue-400">{breakdown.authenticatedUsers}</span>
-            <span className="text-[10px] font-mono-code text-zinc-500">Registered</span>
+            <span className="text-2xl font-bold text-blue-400">{breakdown.registeredGamers}</span>
+            <span className="text-[10px] font-mono-code text-zinc-500">
+              {breakdown.usersInAdmin > 0 ? `+${breakdown.usersInAdmin} admin` : 'Gamers'}
+            </span>
           </div>
         </div>
 

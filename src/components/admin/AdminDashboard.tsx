@@ -15,6 +15,7 @@ import {
   Menu,
   X,
   Swords,
+  AlertTriangle,
 } from 'lucide-react';
 import { User as FirebaseUser, signOut } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
@@ -82,6 +83,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [chorPoliceData, setChorPoliceData] = useState<ChorPoliceAnalyticsData | null>(null);
   const [chakrantoData, setChakrantoData] = useState<ChakrantoAnalyticsData | null>(null);
   const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
 
@@ -89,6 +91,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const loadAllData = async () => {
     try {
       setIsLoading(true);
+      setLoadError(null);
       const [statsRes, usersRes, roomsRes, gamesRes, cpRes, chRes, logsRes] = await Promise.all([
         getAdminOverviewStats(),
         getAllUsers(),
@@ -106,8 +109,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setChorPoliceData(cpRes);
       setChakrantoData(chRes);
       setAuditLogs(logsRes);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load admin telemetry:', err);
+      setLoadError(err?.message || 'Failed to query authoritative telemetry from Firestore.');
     } finally {
       setIsLoading(false);
     }
@@ -287,6 +291,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* Main Content Area */}
       <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8">
+        {loadError && (
+          <div className="mb-6 p-4 rounded-xl bg-red-950/40 border border-red-800 text-red-300 flex items-center justify-between gap-3 text-xs font-mono-code">
+            <div className="flex items-center gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+              <span>TELEMETRY QUERY FAILURE: {loadError}. Data access issue detected — zero values are not fabricated.</span>
+            </div>
+            <button
+              type="button"
+              onClick={loadAllData}
+              className="px-3 py-1.5 rounded-lg bg-red-900/60 hover:bg-red-800 text-white font-bold transition-colors cursor-pointer shrink-0"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {activeTab === 'overview' && (
           <OverviewTab stats={stats} isLoading={isLoading} onRefresh={loadAllData} />
         )}
